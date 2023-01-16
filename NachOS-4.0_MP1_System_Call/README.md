@@ -165,3 +165,117 @@ Interrupt::Halt()
     delete kernel;	// Never returns.
 }
 ```
+
+***
+
+### SC_Create
+
+![SC_Create](image/SC_Create.png)
+
+* ExceptionHandler()
+  * Part of steps are the same as above
+  * `kernel->machine->ReadRegister(4)` read register4 system call args1 (filename)
+  * `kernel->machine->WriteRegister(2, (int) status)` The result of the system call, if any, must be put back into r2
+  * `WriteRegister` after `SysCreate`
+    * Update `PrevPCReg`, `PCReg`, `NextPCReg`
+    * set previous programm counter (debugging only)
+    * set programm counter to next instruction (all Instructions are 4 byte wide)
+    * set next programm counter for brach execution
+```cc
+ExceptionHandler(ExceptionType which)
+{
+    int type = kernel->machine->ReadRegister(2);
+	int val;
+    int status, exit, threadID, programID;
+	int size;
+	int id;
+	DEBUG(dbgSys, "Received Exception " << which << " type: " << type << "\n");
+    switch (which) {
+    case SyscallException:
+      	switch(type) {
+      	...
+		case SC_Create:
+			val = kernel->machine->ReadRegister(4);
+			{
+			char *filename = &(kernel->machine->mainMemory[val]);
+
+			// return value
+			// 1: success
+			// 0: failed
+			status = SysCreate(filename);
+
+			if(status != -1) status = 1;
+			kernel->machine->WriteRegister(2, (int) status);
+			}
+			kernel->machine->WriteRegister(PrevPCReg, kernel->machine->ReadRegister(PCReg));
+			kernel->machine->WriteRegister(PCReg, kernel->machine->ReadRegister(PCReg) + 4);
+			kernel->machine->WriteRegister(NextPCReg, kernel->machine->ReadRegister(PCReg)+4);
+			return;
+			ASSERTNOTREACHED();
+            break;
+        ...
+        }
+}
+
+
+// machine.cc
+void 
+Machine::WriteRegister(int num, int value)
+{
+    ASSERT((num >= 0) && (num < NumTotalRegs));
+    registers[num] = value;
+}
+```
+
+* SC_Create()
+
+```cc
+int SysCreate(char *filename)
+{
+	// return value
+	// 1: success
+	// 0: failed
+	return kernel->interrupt->CreateFile(filename);
+}
+
+
+// interrupt.cc
+int
+Interrupt::CreateFile(char *filename)
+{
+    return kernel->CreateFile(filename);
+}
+```
+
+* FileSystem::Create()
+    * Specifically call the `open` in `stdlib` (so call stub file system)
+```cc
+// makefile
+DEFINES =  -DFILESYS_STUB -DRDATA -DSIM_FIX
+
+
+#ifdef FILESYS_STUB 		// Temporarily implement file system calls as 
+				// calls to UNIX, until the real file system
+				// implementation is available
+class FileSystem {
+  public:
+    FileSystem() { for (int i = 0; i < 20; i++) fileDescriptorTable[i] = NULL; }
+
+    bool Create(char *name) 
+	{
+        int fileDescriptor = OpenForWrite(name);
+
+        if (fileDescriptor == -1) return FALSE;
+        Close(fileDescriptor); 
+        return TRUE; 
+	}
+}
+
+int
+OpenForWrite(char *name)
+{
+    int fd = open(name, O_RDWR|O_CREAT|O_TRUNC, 0666);
+    ASSERT(fd >= 0); 
+    return fd;
+}
+```
