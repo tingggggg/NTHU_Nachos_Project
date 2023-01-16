@@ -100,6 +100,7 @@ Machine::RaiseException(ExceptionType which, int badVAddr)
 * ExceptionHandler()
   * `kernel->machine->ReadRegister(2)` read the register2 value
   * Goto the switch case corresponding to the `type`
+  * Specifically execute `SysHalt()`
 
 ```cc
 // machine.h
@@ -141,3 +142,26 @@ ExceptionHandler(ExceptionType which)
 }
 ```
 
+* SysHalt()
+  * Kernel be deleted in the function final(So OS shutdown because `kernel` link all components)
+```cc
+void SysHalt()
+{
+  kernel->interrupt->Halt();
+}
+
+
+// interrupt.cc
+//----------------------------------------------------------------------
+// Interrupt::Halt
+// 	Shut down Nachos cleanly, printing out performance statistics.
+//----------------------------------------------------------------------
+void
+Interrupt::Halt()
+{
+    cout << "Machine halting!\n\n";
+    cout << "This is halt\n";
+    kernel->stats->Print();
+    delete kernel;	// Never returns.
+}
+```
