@@ -279,3 +279,177 @@ OpenForWrite(char *name)
     return fd;
 }
 ```
+
+***
+
+### SC_PrintInt
+
+![SC_PrintInt](image/SC_PrintInt.png)
+
+* ExceptionHandler() same as `SC_Create` above
+
+* SysPrintInt()
+  * Specifically call the `SyncConsoleOutput::PutInt()`
+  * Use `sprintf()` to store int into string `str`
+  * `lock->Acquire()`, `lock->Release()` achieve synchronization (make sure a string can be printed completely without interruption, other thread can not get the writer resources)
+  * `waitFor->P()` waiting if `semaphore` resource not available.
+```cc
+void SysPrintInt(int number)
+{
+	kernel->synchConsoleOut->PutInt(number);
+}
+
+void
+SynchConsoleOutput::PutInt(int value)
+{
+    char str[15];
+    int idx=0;
+    //sprintf(str, "%d\n\0", value);  the true one
+    sprintf(str, "%d\n\0", value); //simply for trace code
+    lock->Acquire();
+    do{	
+        consoleOutput->PutChar(str[idx]);
+	    idx++;
+        waitFor->P();
+	
+    } while(str[idx] != '\0');
+    lock->Release();
+}
+
+class SynchConsoleOutput : public CallBackObj {
+  ...
+  private:
+    Lock *lock;			// only one writer at a time
+    ...
+};
+```
+
+* Semaphore::P()
+  * It will diable interrupts before acquiring resources
+
+```cc
+void
+Semaphore::P()
+{
+    Interrupt *interrupt = kernel->interrupt;
+    Thread *currentThread = kernel->currentThread;
+    
+    // disable interrupts
+    IntStatus oldLevel = interrupt->SetLevel(IntOff);	
+    
+    while (value == 0) { 		// semaphore not available
+	queue->Append(currentThread);	// so go to sleep
+	currentThread->Sleep(FALSE);
+    } 
+    value--; 			// semaphore available, consume its value
+   
+    // re-enable interrupts
+    (void) interrupt->SetLevel(oldLevel);	
+}
+```
+
+* ConsoleOutput::PutChar()
+  * `WriteFile` write data into file
+  * Set `putBusy` `True` to avoid others instructions
+
+```cc
+//----------------------------------------------------------------------
+// ConsoleOutput::PutChar()
+// 	Write a character to the simulated display, schedule an interrupt 
+//	to occur in the future, and return.
+//----------------------------------------------------------------------
+void
+ConsoleOutput::PutChar(char ch)
+{
+    ASSERT(putBusy == FALSE);
+    WriteFile(writeFileNo, &ch, sizeof(char));
+    putBusy = TRUE;
+    kernel->interrupt->Schedule(this, ConsoleTime, ConsoleWriteInt);
+}
+
+int
+WriteFile(int fd, char *buffer, int nBytes)
+{
+    int retVal = write(fd, buffer, nBytes);
+    ASSERT(retVal == nBytes);
+    return retVal;
+}
+```
+
+* Interrupt::Schedule()
+  * Arrange for the CPU to be interrupted when simulated time reaches "now + when"
+  * `toCall` is the object to call when the interrupt occurs
+  * `fromNow` is how far in the future (in simulated time) the interrupt is to occur
+  * `type` is the hardware device that generated the interrupt
+```cc
+void
+Interrupt::Schedule(CallBackObj *toCall, int fromNow, IntType type)
+{
+    int when = kernel->stats->totalTicks + fromNow;
+    PendingInterrupt *toOccur = new PendingInterrupt(toCall, when, type);
+
+    DEBUG(dbgInt, "Scheduling interrupt handler the " << intTypeNames[type] << " at time = " << when);
+    ASSERT(fromNow > 0);
+
+    pending->Insert(toOccur);
+}
+```
+
+* Machine::Run()
+  * Running until simulated time reaches target time("now + when" above), then do one instruction that be inserted before
+  * `OneInstruction` will fetch instruction by `(!ReadMem(registers[PCReg], 4, &raw))`
+```cc
+void
+Machine::Run()
+{
+    Instruction *instr = new Instruction;  // storage for decoded instruction
+
+    if (debug->IsEnabled('m')) {
+        cout << "Starting program in thread: " << kernel->currentThread->getName();
+		cout << ", at time: " << kernel->stats->totalTicks << "\n";
+    }
+    kernel->interrupt->setStatus(UserMode);
+    for (;;) {
+        OneInstruction(instr);
+		kernel->interrupt->OneTick();
+		if (singleStep && (runUntilTime <= kernel->stats->totalTicks))
+	  		Debugger();
+    }
+}
+
+achine::OneInstruction(Instruction *instr)
+{
+#ifdef SIM_FIX
+    int byte;       // described in Kane for LWL,LWR,...
+#endif
+
+    int raw;
+    int nextLoadReg = 0; 	
+    int nextLoadValue = 0; 	// record delayed load operation, to apply in the future
+
+    /* fetch instruction */ 
+    if (!ReadMem(registers[PCReg], 4, &raw)) return;	// exception occurred 
+    instr->value = raw;
+    instr->Decode();
+
+    ...
+
+    switch (instr->opCode) {
+      ...
+    }
+}
+```
+
+* Interrupt::OneTick()
+  * Advance simulated time and check if there are any pending interrupts to be called
+
+* Interrupt::CheckIfDue()
+  * Check if any interrupts are scheduled to occur, and if so, fire them off
+
+* ConsoleOutput::CallBack()
+  * Set `putBusy` to `FALSE` so that can do print out next item
+  
+  * `kernel->stats->numConsoleCharsWritten++` count `numConsoleCharsWritten`
+
+* SynchConsoleInput::CallBack()
+  * `waitFor->V()` release a `semaphore` resource
