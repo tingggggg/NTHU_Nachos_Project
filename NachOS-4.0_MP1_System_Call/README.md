@@ -1,5 +1,77 @@
 # MP1 System Call
 
+## Implement four I/O system calls in NachOS
+
+* Working items
+  1. OpenFileId Open(char *name);
+  Open a file with the name, and returns its corresponding OpenFileId.
+  `Return -1 if fail to open the file`.
+
+  2. int Write(char *buffer, int size, OpenFileId id);
+  Write “size” characters from the buffer into the file, and return the
+  number of characters actually written to the file.
+  `Return -1, if fail to write the file`.
+
+  3. int Read(char *buffer, int size, OpenFileId id);
+  Read “size” characters from the file to the buffer, and return the
+  number of characters actually read from the file.
+  `Return -1, if fail to read the file`.
+
+  4. int Close(OpenFileId id);
+  Close the file with id.
+  `Return 1 if successfully close the file. Otherwise, return -1`.
+
+* `syscall.h`
+  * define four system call macro
+```cc
+...
+#define SC_Open		6
+#define SC_Read		7
+#define SC_Write	8
+#define SC_Seek     9
+#define SC_Close	10
+...
+```
+
+* `start.S`
+  * Implement the four `system call` of assembly
+  
+```cc
+	.globl Open
+	.ent    Open
+Open:
+	addiu $2, $0, SC_Open
+	syscall
+	j 	$31
+	.end Open
+
+	.globl Write
+	.ent    Write
+Write:
+	addiu $2, $0, SC_Write
+	syscall
+	j 	$31
+	.end Write
+
+	.globl Read
+	.ent    Read
+Read:
+	addiu $2, $0, SC_Read
+	syscall
+	j 	$31
+	.end Read
+
+	.globl Close
+	.ent    Close
+Close:
+	addiu $2, $0, SC_Close
+	syscall
+	j 	$31
+	.end Close
+```
+
+
+
 ## Trace code
 
 *** 
