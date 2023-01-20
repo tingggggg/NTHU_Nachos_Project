@@ -126,6 +126,98 @@ ExceptionHandler(ExceptionType which)
 			return;	
 			ASSERTNOTREACHED();
             break;
+
+		case SC_Open:
+		{
+			val = kernel->machine->ReadRegister(4);
+
+			char *filename = &(kernel->machine->mainMemory[val]);
+			DEBUG(dbgSys, "Open filename: " << filename << "\n");
+
+			status = SysOpen(filename);
+
+			kernel->machine->WriteRegister(2, (int)status);
+
+			DEBUG(dbgSys, "Open fileID: " << status << "\n");
+
+			kernel->machine->WriteRegister(PrevPCReg, kernel->machine->ReadRegister(PCReg));
+			kernel->machine->WriteRegister(PCReg, kernel->machine->ReadRegister(PCReg) + 4);
+			kernel->machine->WriteRegister(NextPCReg, kernel->machine->ReadRegister(PCReg) + 4);
+
+			return;
+			ASSERTNOTREACHED();
+			break;
+		}
+			
+		case SC_Write: 
+		{
+			DEBUG(dbgSys, "Write\n");
+			val = kernel->machine->ReadRegister(4); 
+			{
+			char *buffer = &(kernel->machine->mainMemory[val]);
+			size = kernel->machine->ReadRegister(5); 
+			id = kernel->machine->ReadRegister(6); 
+
+			DEBUG(dbgSys, "Write val: " << val << ", size: " << size << ", fileID: " << id << "\n");
+
+			status = SysWrite(buffer, size, id);
+		
+			kernel->machine->WriteRegister(2, (int) status);
+			}
+				
+			kernel->machine->WriteRegister(PrevPCReg, kernel->machine->ReadRegister(PCReg)); // set previous programm counter (debugging only)
+			kernel->machine->WriteRegister(PCReg, kernel->machine->ReadRegister(PCReg) + 4);
+			kernel->machine->WriteRegister(NextPCReg, kernel->machine->ReadRegister(PCReg)+4);
+			return;
+			ASSERTNOTREACHED();
+			break;
+		}
+			
+		case SC_Read:
+		{
+			val = kernel->machine->ReadRegister(4);
+			{
+			char *buffer = &(kernel->machine->mainMemory[val]);
+			size = kernel->machine->ReadRegister(5); 
+			id = kernel->machine->ReadRegister(6); 
+			
+			// return value
+			// 1: success
+			// 0: failed
+			status = SysRead(buffer, size, id);
+
+			kernel->machine->WriteRegister(2, (int) status);
+			}
+
+			kernel->machine->WriteRegister(PrevPCReg, kernel->machine->ReadRegister(PCReg));
+			kernel->machine->WriteRegister(PCReg, kernel->machine->ReadRegister(PCReg) + 4);
+			kernel->machine->WriteRegister(NextPCReg, kernel->machine->ReadRegister(PCReg)+4);
+
+			return;	
+			ASSERTNOTREACHED();
+            break;
+		}
+			
+		case SC_Close:
+		{
+			val = kernel->machine->ReadRegister(4); // mean fileId
+
+			DEBUG(dbgSys, "Close fileID: " << val << "\n");
+
+			status = SysClose(val);
+			if(status != -1) status = 1; // successfully close file if status not equal -1
+
+			kernel->machine->WriteRegister(2, (int)status);
+			
+			kernel->machine->WriteRegister(PrevPCReg, kernel->machine->ReadRegister(PCReg));
+			kernel->machine->WriteRegister(PCReg, kernel->machine->ReadRegister(PCReg) + 4);
+			kernel->machine->WriteRegister(NextPCReg, kernel->machine->ReadRegister(PCReg)+4);
+
+			return;	
+			ASSERTNOTREACHED();
+            break;
+		}
+
 		case SC_Exit:
 			DEBUG(dbgAddr, "Program exit\n");
             val=kernel->machine->ReadRegister(4);

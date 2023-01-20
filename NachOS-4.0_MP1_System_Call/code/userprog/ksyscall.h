@@ -46,4 +46,19 @@ int SysOpen(char *filename)
 	return kernel->OpenFile(filename);
 }
 
+int SysWrite(char *buffer, int size, int id)
+{
+	return kernel->WriteFile(buffer, size, id);
+}
+
+int SysRead(char *buffer, int size, int id)
+{
+	return kernel->ReadFile(buffer, size, id);
+}
+
+int SysClose(int id)
+{
+	return kernel->CloseFile(id);
+}
+
 #endif /* ! __USERPROG_KSYSCALL_H__ */
