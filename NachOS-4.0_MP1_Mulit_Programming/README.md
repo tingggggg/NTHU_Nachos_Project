@@ -80,3 +80,113 @@ class Thread {
 };
 ```
 
+### `threads/kernel.cc​ Kernel::ExecAll()​`
+
+* Call `Kernel::Exec()` for each threads waiting executed
+
+```cc
+void Kernel::ExecAll()
+{
+	for (int i=1;i<=execfileNum;i++) {
+		int a = Exec(execfile[i]);
+	}
+	currentThread->Finish();
+}
+```
+
+* `Kernel::Exec()`
+
+  For each program to be executed
+
+  * Create a thread
+  * Give thread a address space(AddrSpace)
+  * Excute the actual program through `Fork()`
+  * Increment `threadNum` by 1
+
+```cc
+int Kernel::Exec(char* name)
+{
+	t[threadNum] = new Thread(name, threadNum);
+	t[threadNum]->space = new AddrSpace();
+	t[threadNum]->Fork((VoidFunctionPtr) &ForkExecute, (void *)t[threadNum]);
+	threadNum++;
+
+	return threadNum - 1;
+}
+```
+
+* `threads/thread.cc Thread::Fork()`
+  * Allocate `stack`
+  * Put the thread on the read queue `scheduler->ReadyToRun(this)` (Mark a thread as ready, but not running. Put it on the ready list, for later scheduling onto the CPU.)
+  
+```cc
+int Kernel::Exec(char* name)
+{
+  ...
+	t[threadNum]->Fork((VoidFunctionPtr) &ForkExecute, (void *)t[threadNum]);
+  ...
+}
+
+void 
+Thread::Fork(VoidFunctionPtr func, void *arg)
+{
+    Interrupt *interrupt = kernel->interrupt;
+    Scheduler *scheduler = kernel->scheduler;
+    IntStatus oldLevel;
+    
+    DEBUG(dbgThread, "Forking thread: " << name << " f(a): " << (int) func << " " << arg);
+    StackAllocate(func, arg);
+
+    oldLevel = interrupt->SetLevel(IntOff);
+    scheduler->ReadyToRun(this);	// ReadyToRun assumes that interrupts are disabled!
+
+    (void) interrupt->SetLevel(oldLevel);
+}    
+
+void
+Scheduler::ReadyToRun (Thread *thread)
+{
+    ASSERT(kernel->interrupt->getLevel() == IntOff);
+    DEBUG(dbgThread, "Putting thread on ready list: " << thread->getName());
+	//cout << "Putting thread on ready list: " << thread->getName() << endl ;
+    thread->setStatus(READY);
+    readyList->Append(thread);
+}
+```
+
+* `ForkExecute()`
+  * `AddrSpace::Load()` load the program to memory
+  * If the previous step is successful, `AddrSpace::Execute()` will be executed
+
+```cc
+void ForkExecute(Thread *t)
+{
+	if ( !t->space->Load(t->getName()) ) {
+        /* allocate pageTable for this process */
+    	return;             // executable not found
+    }
+	
+    t->space->Execute(t->getName());
+}
+```
+
+* `AddrSpace::Execute()`
+  * 
+
+```cc
+void 
+AddrSpace::Execute(char* fileName) 
+{
+
+    kernel->currentThread->space = this;
+
+    this->InitRegisters();		// set the initial register values
+    this->RestoreState();		// load page table register
+
+    kernel->machine->Run();		// jump to the user progam
+
+    ASSERTNOTREACHED();			// machine->Run never returns;
+					// the address space exits
+					// by doing the syscall "exit"
+}
+```
