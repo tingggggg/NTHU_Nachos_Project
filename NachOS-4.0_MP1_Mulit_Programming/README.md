@@ -83,6 +83,7 @@ class Thread {
 ### `threads/kernel.cc​ Kernel::ExecAll()​`
 
 * Call `Kernel::Exec()` for each threads waiting executed
+* 
 
 ```cc
 void Kernel::ExecAll()
@@ -154,7 +155,7 @@ Scheduler::ReadyToRun (Thread *thread)
 }
 ```
 
-* `ForkExecute()`
+* `ForkExecute()` be used by previous part `t[threadNum]->Fork((VoidFunctionPtr) &ForkExecute, ..)`
   * `AddrSpace::Load()` load the program to memory
   * If the previous step is successful, `AddrSpace::Execute()` will be executed
 
@@ -171,7 +172,9 @@ void ForkExecute(Thread *t)
 ```
 
 * `AddrSpace::Execute()`
-  * 
+  * Initial the user registers
+  * Load the page table
+  * `kernel->machine->Run()` simulation system execution
 
 ```cc
 void 
@@ -189,4 +192,56 @@ AddrSpace::Execute(char* fileName)
 					// the address space exits
 					// by doing the syscall "exit"
 }
+```
+
+* `Thread::Finish()`
+  * Called by ThreadRoot when a thread is done executing the forked procedure
+```diff
+void Kernel::ExecAll()
+{
+	for (int i=1;i<=execfileNum;i++) {
+		int a = Exec(execfile[i]);
+	}
++	currentThread->Finish();
+    //Kernel::Exec();	
+}
+
+void
+Thread::Finish()
+{
+    (void) kernel->interrupt->SetLevel(IntOff);		
+    ASSERT(this == kernel->currentThread);
+    
+    DEBUG(dbgThread, "Finishing thread: " << name);
+    Sleep(TRUE);				// invokes SWITCH
+    // not reached
+}
+```
+
+* `Thread::Sleep ()`
+  * Only currentThread can call `Sleep()`
+  * `while ((nextThread = kernel->scheduler->FindNextToRun()) == NULL) {...}` checks if there is another thread to run
+    * if yes, `kernel->scheduler->Run(nextThread, finishing)` got to next
+    * if not, `kernel->interrupt->Idle()`. (no one to run, wait for an interrupt)
+
+```cc
+void
+Thread::Sleep (bool finishing)
+{
+    Thread *nextThread;
+    
+    ASSERT(this == kernel->currentThread);
+    ASSERT(kernel->interrupt->getLevel() == IntOff);
+    
+    DEBUG(dbgThread, "Sleeping thread: " << name);
+
+    status = BLOCKED;
+	//cout << "debug Thread::Sleep " << name << "wait for Idle\n";
+    while ((nextThread = kernel->scheduler->FindNextToRun()) == NULL) {
+		kernel->interrupt->Idle();	// no one to run, wait for an interrupt
+	}    
+    // returns when it's time for us to run
+    kernel->scheduler->Run(nextThread, finishing); 
+}
+
 ```
