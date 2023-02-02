@@ -224,6 +224,11 @@ Thread::Finish()
     * if yes, `kernel->scheduler->Run(nextThread, finishing)` got to next
     * if not, `kernel->interrupt->Idle()`. (no one to run, wait for an interrupt)
 
+* `Scheduler::Run (Thread *nextThread, bool finishing)`
+  * Dispatch the CPU to nextThread.
+  * "nextThread" is the thread to be put into the CPU.
+  * "finishing" is set if the current thread is to be deleted
+
 ```cc
 void
 Thread::Sleep (bool finishing)
@@ -244,4 +249,127 @@ Thread::Sleep (bool finishing)
     kernel->scheduler->Run(nextThread, finishing); 
 }
 
+
+void
+Scheduler::Run (Thread *nextThread, bool finishing)
+{
+    Thread *oldThread = kernel->currentThread;
+    
+    ASSERT(kernel->interrupt->getLevel() == IntOff);
+
+    if (finishing) {	// mark that we need to delete current thread
+        ASSERT(toBeDestroyed == NULL);
+	    toBeDestroyed = oldThread;
+    }
+    
+    if (oldThread->space != NULL) {	// if this thread is a user program,
+        oldThread->SaveUserState(); 	// save the user's CPU registers
+	    oldThread->space->SaveState();
+    }
+    
+    oldThread->CheckOverflow();		    // check if the old thread
+					    // had an undetected stack overflow
+
+    kernel->currentThread = nextThread;  // switch to the next thread
+    nextThread->setStatus(RUNNING);      // nextThread is now running
+    
+    DEBUG(dbgThread, "Switching from: " << oldThread->getName() << " to: " << nextThread->getName());
+    
+    // This is a machine-dependent assembly language routine defined 
+    // in switch.s.  You may have to think
+    // a bit to figure out what happens after this, both from the point
+    // of view of the thread and from the perspective of the "outside world".
+
+    SWITCH(oldThread, nextThread);
+
+    // we're back, running oldThread
+      
+    // interrupts are off when we return from switch!
+    ASSERT(kernel->interrupt->getLevel() == IntOff);
+
+    DEBUG(dbgThread, "Now in thread: " << oldThread->getName());
+
+    CheckToBeDestroyed();		// check if thread we were running
+					// before this one has finished
+					// and needs to be cleaned up
+    
+    if (oldThread->space != NULL) {	    // if there is an address space
+        oldThread->RestoreUserState();     // to restore, do it.
+	    oldThread->space->RestoreState();
+    }
+}
+```
+
+* `Machine::Run()`, `Machine::OneInstruction()`
+  * Simulation system execution
+  * `OneInstruction` to read current instruction (including decode the `rs` / `rt` / `rd` / `opCode`)
+
+```cc
+void
+Machine::Run()
+{
+    Instruction *instr = new Instruction;  // storage for decoded instruction
+
+    if (debug->IsEnabled('m')) {
+        cout << "Starting program in thread: " << kernel->currentThread->getName();
+		cout << ", at time: " << kernel->stats->totalTicks << "\n";
+    }
+    kernel->interrupt->setStatus(UserMode);
+    for (;;) {
+        OneInstruction(instr);
+		kernel->interrupt->OneTick();
+		if (singleStep && (runUntilTime <= kernel->stats->totalTicks))
+	  		Debugger();
+    }
+}
+
+
+void Machine::OneInstruction(Instruction *instr)
+{
+    int raw;
+    /* Fetch instruction */ 
+    if (!ReadMem(registers[PCReg], 4, &raw))
+        return; /* exception occurred */
+
+    instr->value = raw;
+    instr->Decode();
+    ...
+    int pcAfter = registers[NextPCReg] + 4;
+    unsigned int rs, rt, imm;
+
+    /* Execute the instruction */
+    switch (instr->opCode) {
+        case OP_ADD:
+        sum = registers[instr->rs] + registers[instr->rt];
+	    registers[instr->rd] = sum;
+	    break;
+        ...
+    }
+    ...
+    /* Advance program counters */
+    registers[PrevPCReg] = registers[PCReg];
+    registers[PCReg] = registers[NextPCReg];
+    registers[NextPCReg] = pcAfter;
+}
+
+//---------------
+class Instruction {
+public:
+    void Decode();	
+    unsigned int value;
+    char opCode; /* Type of instruction */
+    char rs, rt, rd; /* Three registers from instruction */
+    int extra; /* Immediate or target or shamt field or offset */
+};
+void Instruction::Decode()
+{
+    OpInfo *opPtr;
+    
+    rs = (value >> 21) & 0x1f;
+    rt = (value >> 16) & 0x1f;
+    rd = (value >> 11) & 0x1f;
+    opPtr = &opTable[(value >> 26) & 0x3f];
+    opCode = opPtr->opCode;
+    ...
+}
 ```
