@@ -4,7 +4,7 @@
 
 * `AddrSpace`
 
-  * `AddrSpace::AddrSpace()` load a thread to use whole phisical memort in default
+  * `AddrSpace::AddrSpace()` load a thread to use whole physical memort in default
 
   ```cc
   AddrSpace::AddrSpace()
