@@ -2,6 +2,65 @@
 
 ## Implement page table in NachOS
 
+* `AddrSpace`
+
+  * `AddrSpace::AddrSpace()` load a thread to use whole phisical memort in default
+
+  ```cc
+  AddrSpace::AddrSpace()
+  {
+      pageTable = new TranslationEntry[NumPhysPages];
+      for (int i = 0; i < NumPhysPages; i++) {
+        pageTable[i].virtualPage = i;	// for now, virt page # = phys page #
+        pageTable[i].physicalPage = i;
+        pageTable[i].valid = TRUE;
+        pageTable[i].use = FALSE;
+        pageTable[i].dirty = FALSE;
+        pageTable[i].readOnly = FALSE;  
+      }
+      
+      // zero out the entire address space
+      bzero(kernel->machine->mainMemory, MemorySize);
+  }
+  ```
+
+  * Load at runtime stage instead of load at initial stage
+    * `numPages = divRoundUp(size, PageSize)` calculate the actual number of pages needed and check `ASSERT(numPages < kernel->usedPhyPage->numUnused())`
+    * Set up page table
+
+  ```cc
+  bool AddrSpace::Load(char *fileName)
+  {
+    ...
+
+    #ifdef RDATA
+    // how big is address space?
+        size = noffH.code.size + noffH.readonlyData.size + noffH.initData.size + noffH.uninitData.size + UserStackSize;	
+        // we need to increase the size to leave room for the stack
+    #else
+    // how big is address space?
+        size = noffH.code.size + noffH.initData.size + noffH.uninitData.size + UserStackSize;	
+        // we need to increase the size to leave room for the stack
+    #endif
+
+    numPages = divRoundUp(size, PageSize);
+    ASSERT(numPages < kernel->usedPhyPage->numUnused());
+
+    /* set up page table after we know how much address space the program needs*/
+    pageTable = new TranslationEntry[numPages];
+    for (int i = 0; i < numPages; i++) {
+        pageTable[i].virtualPage = i;	
+        pageTable[i].physicalPage = kernel->usedPhyPage->checkAndSet();
+        pageTable[i].valid = true;
+        pageTable[i].use = false;
+        pageTable[i].dirty = false;
+        pageTable[i].readOnly = false; 
+        ASSERT(pageTable[i].physicalPage != -1); 
+        bzero(kernel->machine->mainMemory + pageTable[i].physicalPage * PageSize, Page
+    }
+    ...
+  }
+  ```
 
 ## Trace Code
 
