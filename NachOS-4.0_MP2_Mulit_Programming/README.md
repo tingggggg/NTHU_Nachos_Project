@@ -198,7 +198,8 @@ typedef struct segment {
   ```
 
   * Modified method (multiple threads uses fragmented memory)
-    * `Translate()` Convert virtualAddr to corresponding physicalAddr
+    * `Translate()` Convert `virtualAddr` to corresponding `physicalAddr`
+
 
   ```cc
   // TODO
