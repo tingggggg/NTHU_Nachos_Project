@@ -2,6 +2,8 @@
 
 ## Implement page table in NachOS
 
+### Modify pageTable building
+
 * `AddrSpace`
 
   * `AddrSpace::AddrSpace()` load a thread to use whole physical memort in default
@@ -27,6 +29,7 @@
   * Load at runtime stage instead of load at initial stage
     * `numPages = divRoundUp(size, PageSize)` calculate the actual number of pages needed and check `ASSERT(numPages < kernel->usedPhyPage->numUnused())`
     * Set up page table
+    * Add a new member(`class UsedPhyPage`) in `Kernel` to manage the state of the page table(physical memory)
 
   ```cc
   bool AddrSpace::Load(char *fileName)
@@ -55,11 +58,150 @@
         pageTable[i].use = false;
         pageTable[i].dirty = false;
         pageTable[i].readOnly = false; 
+
         ASSERT(pageTable[i].physicalPage != -1); 
         bzero(kernel->machine->mainMemory + pageTable[i].physicalPage * PageSize, Page
     }
     ...
   }
+  ```
+
+  * `class UsedPhyPage` member in `Kernel`
+    * Record each page status(`0`: unused, `1`: used) 
+    * `UsedPhyPage::numUnused()` search number of unused page
+    * `UsedPhyPage::checkAndSet()` get the unused `pageNum`
+
+  ```cc
+  class UsedPhyPage {
+  public:
+      UsedPhyPage();
+      ~UsedPhyPage();
+      int *pages; /* 0 for unused, 1 for used */
+      int numUnused();
+      int checkAndSet();
+  };
+
+  UsedPhyPage::UsedPhyPage()
+  {
+      pages = new int[NumPhysPages];
+      memset(pages, 0, sizeof(int) * NumPhysPages);
+  }   
+
+  int UsedPhyPage::numUnused()
+  {
+      int count = 0;
+
+      for(int i = 0; i < NumPhysPages; i++) {
+          if(pages[i] == 0) count++;
+      }
+      return count;
+  }  
+
+  /* return -1 if no unused page can be found */
+  int UsedPhyPage::checkAndSet()
+  {
+      int unUsedPage = -1;
+
+      for(int i = 90; i < NumPhysPages; i--) {
+          if(pages[i] == 0) {
+              unUsedPage = i;
+              break;
+          }
+      }
+      pages[unUsedPage] = 1;
+      return unUsedPage;
+  }   
+
+  // -----
+  class Kernel {
+  public:
+      Kernel(int argc, char **argv);
+              // Interpret command line arguments
+      ~Kernel();		        // deallocate the kernel
+      
+      void Initialize(); 		// initialize the kernel -- separated
+      ...
+      UsedPhyPage* usedPhyPage;
+      ...
+  }
+  ```
+
+### Modify executable file loading
+
+The nachos executable is divided into four parts (`header / code /initData / readonlyData`)
+
+* Get metadata from header (info: start location & offset)
+
+```cc
+/* coff2noff/noff.h */
+
+typedef struct noffHeader {
+   int noffMagic;	/* should be NOFFMAGIC */
+   Segment code; /* executable code segment */ 
+   Segment initData; /* initialized data segment */
+#ifdef RDATA
+   Segment readonlyData;	/* read only data */
+#endif
+   Segment uninitData; /* uninitialized data segment, should be zero'ed 
+                        * before use */
+} NoffHeader;
+
+typedef struct segment {
+    int virtualAddr; /* location of segment in virt addr space */
+    int inFileAddr; /* location of segment in this file */
+    int size; /* size of segment */
+} Segment;
+```
+
+* The goal is to load each segment from its position in the file to the physicalAddr
+
+  * Original method (one thread use all memory)
+
+  ```cc
+  bool 
+  AddrSpace::Load(char *fileName) 
+  {
+      OpenFile *executable = kernel->fileSystem->Open(fileName);
+      NoffHeader noffH;
+      unsigned int size;
+
+      executable->ReadAt((char *)&noffH, sizeof(noffH), 0);
+      if ((noffH.noffMagic != NOFFMAGIC) && 
+      (WordToHost(noffH.noffMagic) == NOFFMAGIC))
+        SwapHeader(&noffH);
+      ASSERT(noffH.noffMagic == NOFFMAGIC);
+
+  // then, copy in the code and data segments into memory
+  // Note: this code assumes that virtual address = physical address
+      if (noffH.code.size > 0) {
+          executable->ReadAt(
+      &(kernel->machine->mainMemory[noffH.code.virtualAddr]), 
+        noffH.code.size, noffH.code.inFileAddr);
+      }
+      if (noffH.initData.size > 0) {
+          executable->ReadAt(
+      &(kernel->machine->mainMemory[noffH.initData.virtualAddr]),
+        noffH.initData.size, noffH.initData.inFileAddr);
+      }
+
+  #ifdef RDATA
+      if (noffH.readonlyData.size > 0) {
+          executable->ReadAt(
+      &(kernel->machine->mainMemory[noffH.readonlyData.virtualAddr]),
+        noffH.readonlyData.size, noffH.readonlyData.inFileAddr);
+      }
+  #endif
+
+      delete executable;			// close file
+      return TRUE;			// success
+  }
+  ```
+
+  * Modified method (multiple threads uses fragmented memory)
+    * `Translate()` Convert virtualAddr to corresponding physicalAddr
+
+  ```cc
+  // TODO
   ```
 
 ## Trace Code
