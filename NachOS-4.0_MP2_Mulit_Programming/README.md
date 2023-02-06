@@ -198,11 +198,55 @@ typedef struct segment {
   ```
 
   * Modified method (multiple threads uses fragmented memory)
-    * `Translate()` Convert `virtualAddr` to corresponding `physicalAddr`
+    * `Translate()` convert `virtualAddr` to corresponding `physicalAddr`
+    * `calChunkSize()` calculate the chunk size
+    * `virtualAddr` corresponds to `physicalAddr (non-consecutive)`, so move one by one page
+    * `executable->ReadAt(., ., ., .)` original & modified method difference
 
+      * original: `executable->ReadAt(&(kernel->machine->mainMemory[noffH.code.virtualAddr]), noffH.code.size, noffH.code.inFileAddr)`
+
+      * modified(one by one page): `executable->ReadAt(&(kernel->machine->mainMemory[physicalAddr]), chunkSize, noffH.code.inFileAddr + inFilePosiotion)`
 
   ```cc
-  // TODO
+    int unReadSize;
+    int chunkStart;
+    int chunkSize;
+    int inFilePosiotion;
+
+    if (noffH.code.size > 0) {
+        DEBUG(dbgAddr, "Initializing code segment.");
+	    DEBUG(dbgAddr, noffH.code.virtualAddr << ", " << noffH.code.size);
+
+        unReadSize = noffH.code.size;
+        chunkStart = noffH.code.virtualAddr;
+        chunkSize = 0;
+        inFilePosiotion = 0;
+
+        /* while still unread code */
+        while(unReadSize > 0) {
+            
+            /* first chunk and last chunk might not be full */
+            chunkSize =  calChunkSize(chunkStart, unReadSize); 
+            Translate(chunkStart, &physicalAddr, 1);
+            executable->ReadAt(&(kernel->machine->mainMemory[physicalAddr]), chunkSize, noffH.code.inFileAddr + inFilePosiotion);
+
+            unReadSize = unReadSize - chunkSize;
+            chunkStart = chunkStart + chunkSize;
+            inFilePosiotion = inFilePosiotion + chunkSize;
+        }
+
+        // executable->ReadAt(&(kernel->machine->mainMemory[noffH.code.virtualAddr]), noffH.code.size, noffH.code.inFileAddr);
+    }
+
+    if (noffH.initData.size > 0) {
+      ...
+    }
+
+  #ifdef RDATA
+    if (noffH.readonlyData.size > 0) {
+      ...
+    }
+  #endif
   ```
 
 ## Trace Code
