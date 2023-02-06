@@ -25,6 +25,17 @@ class SynchConsoleInput;
 class SynchConsoleOutput;
 class SynchDisk;
 
+class UsedPhyPage {
+public:
+    UsedPhyPage();
+    ~UsedPhyPage();
+
+    int numUnused();
+    int checkAndSet();
+
+    int *pages; /*record each page status (0: unused, 1: used)*/
+};
+
 class Kernel {
   public:
     Kernel(int argc, char **argv);
@@ -63,6 +74,8 @@ class Kernel {
     FileSystem *fileSystem;     
     PostOfficeInput *postOfficeIn;
     PostOfficeOutput *postOfficeOut;
+
+    UsedPhyPage *usedPhyPage;
 
     int hostName;               // machine identifier
 

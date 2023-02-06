@@ -114,6 +114,8 @@ Kernel::Initialize()
     postOfficeIn = new PostOfficeInput(10);
     postOfficeOut = new PostOfficeOutput(reliability);
 
+    usedPhyPage = new UsedPhyPage();
+
     interrupt->Enable();
 }
 
@@ -135,6 +137,7 @@ Kernel::~Kernel()
     delete fileSystem;
     delete postOfficeIn;
     delete postOfficeOut;
+    delete usedPhyPage;
     
     Exit(0);
 }
@@ -328,3 +331,46 @@ int Kernel::CloseFile(int id)
 	return fileSystem->CloseF(id);
 }
 
+/* UsedPhyPage
+ * 
+ * constructor
+ * destructor
+ * int numUnused()
+ * int checkAndSet()
+ * int *pages : record each page status (0: unused, 1: used)
+ */
+
+UsedPhyPage::UsedPhyPage()
+{
+    pages = new int[NumPhysPages];
+    memset(pages, 0, sizeof(int) * NumPhysPages);
+}
+
+UsedPhyPage::~UsedPhyPage()
+{
+    delete[] pages;
+}
+
+int UsedPhyPage::numUnused()
+{
+    int cnt = 0;
+    for (int i = 0; i < NumPhysPages; i++) {
+        cnt += pages[i];
+    }
+    return NumPhysPages - cnt;
+}
+
+int UsedPhyPage::checkAndSet()
+{
+    int unUsedPage = -1;
+    for (int i = 90; i < NumPhysPages; i++) {
+        if (pages[i] == 0) {
+            unUsedPage = i;
+            break;
+        }
+    }
+    
+    ASSERT(unUsedPage != -1);
+    pages[unUsedPage] = 1;
+    return unUsedPage;
+}
