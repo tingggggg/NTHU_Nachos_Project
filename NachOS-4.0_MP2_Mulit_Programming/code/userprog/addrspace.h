@@ -39,6 +39,8 @@ class AddrSpace {
     // is 0 for Read, 1 for Write.
     ExceptionType Translate(unsigned int vaddr, unsigned int *paddr, int mode);
 
+    int calChunkSize(int chunkStart, int unReadSize);
+
   private:
     TranslationEntry *pageTable;	// Assume linear page table translation
 					// for now!
