@@ -406,7 +406,6 @@ int UsedPhyPage::checkAndSet()
         while (shift < 32) {
             if (!(p & (1 << shift))) {
                 unUsedPage = i * 32 + shift;
-                bit_pages[i] |= (1 << shift);
                 break;
             }
             shift++;
@@ -417,5 +416,7 @@ int UsedPhyPage::checkAndSet()
     }
 
     ASSERT(unUsedPage != -1);
+    ASSERT(unUsedPage < NumPhysPages); // Avoid finding target that exceed the upper limit of `NumPhysPages`
+    bit_pages[unUsedPage / 32] |= (1 << (unUsedPage % 32));
     return unUsedPage;
 }
