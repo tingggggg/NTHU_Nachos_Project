@@ -6,6 +6,106 @@
 
 ![Results](images/result.png)
 
+### v2 - Optimize page table records (time complexity, space complexity)
+
+Use bit to record page status, no waste of space
+
+* `*bit_pages` each bit records a page status
+
+```diff
+class UsedPhyPage {
+public:
+-    int *pages; /*record each page status (0: unused, 1: used)*/
+    
++    int num_bit_pages;
++    int *bit_pages; /*record each page status (0: unused, 1: used)*/
+};
+```
+
+* Compared with the original method, the space compliexity of the new method is optimized by about 32 times
+
+```diff
+UsedPhyPage::UsedPhyPage()
+{
+-    pages = new int[NumPhysPages];
+-    memset(pages, 0, sizeof(int) * NumPhysPages);
+
++    num_bit_pages = (NumPhysPages + 31) / 32;
++    bit_pages = new int[num_bit_pages];
++    memset(bit_pages, 0, sizeof(int) * num_bit_pages);
+}
+```
+
+* Refer to the `__builtin_popcount()` function and apply it to the overall page status count (`bit Manipulation`)
+
+```cc
+unsigned int popcount(unsigned int u)
+{
+    u = (u & 0x55555555) + ((u >> 1) & 0x55555555);
+    u = (u & 0x33333333) + ((u >> 2) & 0x33333333);
+    u = (u & 0x0F0F0F0F) + ((u >> 4) & 0x0F0F0F0F);
+    u = (u & 0x00FF00FF) + ((u >> 8) & 0x00FF00FF);
+    u = (u & 0x0000FFFF) + ((u >> 16) & 0x0000FFFF);
+    return u;
+}
+```
+
+```diff
+int UsedPhyPage::numUnused()
+{
+-    int cnt = 0;
+-    for (int i = 0; i < NumPhysPages; i++) {
+-        cnt += pages[i];
+-    }
+-    return NumPhysPages - cnt;
+
++    int cnt = 0;
++    for (int i = 0; i < num_bit_pages; i++) {
++        cnt += popcount(bit_pages[i]);
++    }
++    return NumPhysPages - cnt;
+}
+```
+
+* According new structure to update method of finding unused page
+
+```diff
+int UsedPhyPage::checkAndSet()
+{
+-    int unUsedPage = -1;
+-    for (int i = 0; i < NumPhysPages; i++) {
+-        if (pages[i] == 0) {
+-            unUsedPage = i;
+-            break;
+-        }
+-    }
+-
+-    ASSERT(unUsedPage != -1);
+-    pages[unUsedPage] = 1;
+
++    int unUsedPage = -1;
++    for (int i = 0; i < num_bit_pages; i++) {
++        int p = bit_pages[i];
++        int shift = 0;
++        while (shift < 32) {
++            if (!(p & (1 << shift))) {
++                unUsedPage = i * 32 + shift;
++                break;
++            }
++            shift++;
++        }
++        if (unUsedPage != -1) {
++            break;
++        }
++    }
++
++    ASSERT(unUsedPage != -1);
++    ASSERT(unUsedPage < NumPhysPages); // Avoid finding target that exceed the upper limit of `NumPhysPages`
++    bit_pages[unUsedPage / 32] |= (1 << (unUsedPage % 32));
++    return unUsedPage;
+}
+```
+
 ### Modify pageTable building
 
 * `AddrSpace`
