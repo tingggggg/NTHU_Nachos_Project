@@ -33,7 +33,10 @@ public:
     int numUnused();
     int checkAndSet();
 
-    int *pages; /*record each page status (0: unused, 1: used)*/
+    // int *pages; /*record each page status (0: unused, 1: used)*/
+    
+    int num_bit_pages;
+    int *bit_pages; /*record each page status (0: unused, 1: used)*/
 };
 
 class Kernel {

@@ -342,35 +342,80 @@ int Kernel::CloseFile(int id)
 
 UsedPhyPage::UsedPhyPage()
 {
-    pages = new int[NumPhysPages];
-    memset(pages, 0, sizeof(int) * NumPhysPages);
+    // pages = new int[NumPhysPages];
+    // memset(pages, 0, sizeof(int) * NumPhysPages);
+
+    num_bit_pages = (NumPhysPages + 31) / 32;
+    bit_pages = new int[num_bit_pages];
+    memset(bit_pages, 0, sizeof(int) * num_bit_pages);
+}
+
+unsigned int popcount(unsigned int u)
+{
+    u = (u & 0x55555555) + ((u >> 1) & 0x55555555);
+    u = (u & 0x33333333) + ((u >> 2) & 0x33333333);
+    u = (u & 0x0F0F0F0F) + ((u >> 4) & 0x0F0F0F0F);
+    u = (u & 0x00FF00FF) + ((u >> 8) & 0x00FF00FF);
+    u = (u & 0x0000FFFF) + ((u >> 16) & 0x0000FFFF);
+    return u;
 }
 
 UsedPhyPage::~UsedPhyPage()
 {
-    delete[] pages;
+    // delete[] pages;
+
+    delete[] bit_pages;
 }
 
 int UsedPhyPage::numUnused()
 {
+    // int cnt = 0;
+    // for (int i = 0; i < NumPhysPages; i++) {
+    //     cnt += pages[i];
+    // }
+    // return NumPhysPages - cnt;
+
     int cnt = 0;
-    for (int i = 0; i < NumPhysPages; i++) {
-        cnt += pages[i];
+    for (int i = 0; i < num_bit_pages; i++) {
+        cnt += popcount(bit_pages[i]);
     }
     return NumPhysPages - cnt;
 }
 
 int UsedPhyPage::checkAndSet()
 {
+    // int unUsedPage = -1;
+    // for (int i = 0; i < NumPhysPages; i++) {
+    //     if (pages[i] == 0) {
+    //         unUsedPage = i;
+    //         break;
+    //     }
+    // }
+
+    // ASSERT(unUsedPage != -1);
+    // pages[unUsedPage] = 1;
+    // return unUsedPage;
+
     int unUsedPage = -1;
-    for (int i = 90; i < NumPhysPages; i++) {
-        if (pages[i] == 0) {
-            unUsedPage = i;
+
+    for (int i = 0; i < num_bit_pages; i++) {
+
+        int p = bit_pages[i];
+
+        int shift = 0;
+        while (shift < 32) {
+            if (!(p & (1 << shift))) {
+                unUsedPage = i * 32 + shift;
+                bit_pages[i] |= (1 << shift);
+                break;
+            }
+            shift++;
+        }
+        if (unUsedPage != -1) {
             break;
         }
     }
-    
+
     ASSERT(unUsedPage != -1);
-    pages[unUsedPage] = 1;
     return unUsedPage;
 }
