@@ -37,6 +37,13 @@ class Scheduler {
   private:
     List<Thread *> *readyList;  // queue of threads that are ready to run,
 				// but not running
+
+    /* ----------------- MP3 ------------------ */
+    SortedList<Thread *> *L1List; // preemptive SJF
+    SortedList<Thread *> *L2List; // non-preemptive priority
+    List<Thread *> *L3List;       // round-robin (100 ticks)
+    /* ---------------------------------------- */
+    
     Thread *toBeDestroyed;	// finishing thread to be destroyed
     				// by the next thread that runs
 };
