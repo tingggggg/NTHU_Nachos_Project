@@ -107,6 +107,25 @@ class Thread {
     void Print() { cout << name; }
     void SelfTest();		// test whether thread impl is working
 
+    /* -- CPU Scheduler releated members ans member function -- */
+    double approx_burst_time;
+    double last_approx_burst_time;
+    int true_ticks;
+    int cpu_start_ticks;
+    int cpu_end_ticks;
+
+    int accu_wait_ticks;
+    int start_wait_ticks;
+
+    int priority;
+
+    int get_level_of_queue() {return this->priority >= 100 ? 1 : (this->priority >= 50 ? 2 : 3);}
+    void set_wait_start_time(int tick) {this->start_wait_ticks = tick;}
+    int get_wait_time() {return this->accu_wait_ticks;}
+    void record_start_ticks(int cpu_start_ticks);
+    void update_burst_time(int cpu_end_ticks);
+    /* --                                                    -- */
+
   private:
     // some of the private data for this class is listed above
     

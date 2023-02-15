@@ -102,7 +102,41 @@ Thread::Fork(VoidFunctionPtr func, void *arg)
     scheduler->ReadyToRun(this);	// ReadyToRun assumes that interrupts 
 					// are disabled!
     (void) interrupt->SetLevel(oldLevel);
-}    
+} 
+
+//----------------------------------------------------------------------
+// MP3
+// Thread::record_start_ticks
+// 	...
+//----------------------------------------------------------------------
+
+void
+Thread::record_start_ticks(int cpu_start_ticks)
+{
+    ASSERT(cpu_start_ticks >= 0);
+    this->cpu_start_ticks = cpu_start_ticks;
+}
+
+//----------------------------------------------------------------------
+// MP3
+// Thread::update_burst_time
+// 	...
+//----------------------------------------------------------------------
+
+void
+Thread::update_burst_time(int cpu_end_ticks)
+{
+    this->cpu_end_ticks = cpu_end_ticks;
+    this->true_ticks += this->cpu_end_ticks - this->cpu_start_ticks;
+
+    // Update approximate cpu burst time (ti)
+    this->approx_burst_time = 0.5 * this->true_ticks + 
+                              0.5 * this->last_approx_burst_time;
+
+    // Update last approximate cpu burst time (ti - 1)
+    this->last_approx_burst_time = this->approx_burst_time;
+    this->true_ticks = 0; // reset
+}
 
 //----------------------------------------------------------------------
 // Thread::CheckOverflow
