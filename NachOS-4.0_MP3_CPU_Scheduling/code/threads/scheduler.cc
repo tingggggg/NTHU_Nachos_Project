@@ -23,6 +23,30 @@
 #include "scheduler.h"
 #include "main.h"
 
+static int
+L1SchedulingComp (Thread *x, Thread *y)
+{
+    if (x->approx_burst_time < y->approx_burst_time) {
+        return -1;
+    } else if (x->approx_burst_time > y->approx_burst_time) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+static int
+L2SchedulingComp (Thread *x, Thread *y)
+{
+    if (x->priority < y->priority) {
+        return 1;
+    } else if (x->priority > y->priority) {
+        return -1;
+    } else {
+        return 0;
+    }
+}
+
 //----------------------------------------------------------------------
 // Scheduler::Scheduler
 // 	Initialize the list of ready but not running threads.
@@ -33,6 +57,11 @@ Scheduler::Scheduler()
 { 
     readyList = new List<Thread *>; 
     toBeDestroyed = NULL;
+
+    // Initial 3-levels ready-queues
+    L1List = new SortedList<Thread *>(L1SchedulingComp);
+    L2List = new SortedList<Thread *>(L2SchedulingComp);
+    L3List = new List<Thread *>;
 } 
 
 //----------------------------------------------------------------------
