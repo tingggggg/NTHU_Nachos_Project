@@ -29,6 +29,7 @@ const char dbgFile = 'f'; 		// file system
 const char dbgAddr = 'a'; 		// address spaces
 const char dbgNet = 'n'; 		// network emulation
 const char dbgSys = 'u';                // systemcall
+const char dbgSch = 'c';        // CPU Scheduler
 
 class Debug {
   public:
