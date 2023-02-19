@@ -113,10 +113,10 @@ PROGRAMS = unknownhost
 else
 # change this if you create a new test program!
 #PROGRAMS = add halt shell matmult sort segments test1 test2 a
-PROGRAMS = add halt createFile consoleIO_test1 consoleIO_test2 fileIO_test1 fileIO_test2
+PROGRAMS = add halt createFile consoleIO_test1 consoleIO_test2 fileIO_test1 fileIO_test2 hw3t1 hw3t2 hw3t3
 endif
 
-binaries=halt createFile add shell sort segments matmult consoleIO_test1 consoleIO_test2 fileIO_test1 fileIO_test2
+binaries=halt createFile add shell sort segments matmult consoleIO_test1 consoleIO_test2 fileIO_test1 fileIO_test2 hw3t1 hw3t2 hw3t3
 
 all: $(PROGRAMS)
 
@@ -190,7 +190,23 @@ fileIO_test2: fileIO_test2.o start.o
 	$(LD) $(LDFLAGS) start.o fileIO_test2.o -o fileIO_test2.coff
 	$(COFF2NOFF) fileIO_test2.coff fileIO_test2
 
+hw3t1.o: hw3t1.c
+	$(CC) $(CFLAGS) -c hw3t1.c
+hw3t1: hw3t1.o start.o
+	$(LD) $(LDFLAGS) start.o hw3t1.o -o hw3t1.coff
+	$(COFF2NOFF) hw3t1.coff hw3t1
 
+hw3t2.o: hw3t2.c
+	$(CC) $(CFLAGS) -c hw3t2.c
+hw3t2: hw3t2.o start.o
+	$(LD) $(LDFLAGS) start.o hw3t2.o -o hw3t2.coff
+	$(COFF2NOFF) hw3t2.coff hw3t2
+
+hw3t3.o: hw3t3.c
+	$(CC) $(CFLAGS) -c hw3t3.c
+hw3t3: hw3t3.o start.o
+	$(LD) $(LDFLAGS) start.o hw3t3.o -o hw3t3.coff
+	$(COFF2NOFF) hw3t3.coff hw3t3
 
 clean:
 	$(RM) -f *.o *.ii $(binaries)
