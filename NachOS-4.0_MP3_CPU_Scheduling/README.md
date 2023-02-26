@@ -37,7 +37,7 @@ $$ t_i = 0.5 * T + 0.5 * t_{i - 1} $$
         ...
     ```
 
-* `kernel.c`
+* `kernel.cc`
 
     * Add `-ep` flag, Allow the user to create threads and bring in `priority`
 
@@ -74,6 +74,81 @@ $$ t_i = 0.5 * T + 0.5 * t_{i - 1} $$
         return threadNum-1;
     }
     ```
+
+### New additions in `thread.cc / .h`
+
+* `thread.h`
+  
+  members
+  * `approx_burst_time`: approximate burst time
+  * `last_approx_burst_time`: previous approximate burst time
+  * `true_ticks`: actual CPU burst time
+  * `cpu_start_ticks`: thread be dispatched CPU time
+  * `cpu_end_ticks`: thread sleep CPU time
+  * `accu_wait_ticks`: time accumulated in ready-queue
+  * `start_wait_ticks`: thread in READY state time
+  * `priority`: priority of thread
+
+  member functions
+  * `get_level_of_queue()` ???
+  * `set_wait_start_time(int tick)`
+  * `get_wait_time()`
+  * `record_start_ticks(int cpu_start_ticks)`
+  * `update_burst_time(int cpu_end_ticks)`
+
+
+  ```cc
+  class Thread {
+    ...
+
+  public:
+    double approx_burst_time;
+    double last_approx_burst_time;
+    int true_ticks;
+    int cpu_start_ticks;
+    int cpu_end_ticks;
+
+    int accu_wait_ticks;
+    int start_wait_ticks;
+
+    int priority;
+
+    int get_level_of_queue() {return this->priority >= 100 ? 1 : (this->priority >= 50 ? 2 : 3);}
+    void set_wait_start_time(int tick) {this->start_wait_ticks = tick;}
+    int get_wait_time() {return this->accu_wait_ticks;}
+    void record_start_ticks(int cpu_start_ticks);
+    void update_burst_time(int cpu_end_ticks);
+    
+    ...
+  }
+  ```
+
+* `thread.cc`
+
+  ```cc
+  void
+  Thread::record_start_ticks(int cpu_start_ticks)
+  {
+      ASSERT(cpu_start_ticks >= 0);
+      this->cpu_start_ticks = cpu_start_ticks;
+  }
+
+  void
+  Thread::update_burst_time(int cpu_end_ticks)
+  {
+      this->cpu_end_ticks = cpu_end_ticks;
+      this->true_ticks += this->cpu_end_ticks - this->cpu_start_ticks;
+
+      // Update approximate cpu burst time (ti)
+      this->approx_burst_time = 0.5 * this->true_ticks + 
+                                0.5 * this->last_approx_burst_time;
+
+      // Update last approximate cpu burst time (ti - 1)
+      this->last_approx_burst_time = this->approx_burst_time;
+      this->true_ticks = 0; // reset
+  }
+  ```
+
 
 ## Trace Code
 
