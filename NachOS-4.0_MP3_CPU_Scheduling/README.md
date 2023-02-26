@@ -77,7 +77,8 @@ $$ t_i = 0.5 * T + 0.5 * t_{i - 1} $$
 
 ## Trace Code
 
-### New -> Ready
+<details>
+ <summary> <h3>New -> Ready</summary>
 
 * `Kernel::ExecAll()`
   * `Exec` the files(threads) to be executed sequentially (`execfile` stores the name of files that waited executing)
@@ -208,9 +209,10 @@ Scheduler::ReadyToRun (Thread *thread)
 }
 ```
 
-***
+</details>
 
-### Running -> Ready
+<details>
+ <summary> <h3>Running -> Ready</summary>
 
 `AddrSpace::Execute` will call `kernel_machine->Run()` (jump to the user program)
 
@@ -413,9 +415,10 @@ Scheduler::Run (Thread *nextThread, bool finishing)
 }
 ```
 
-***
+</details>
 
-### Running -> Waiting
+<details>
+ <summary> <h3>Running -> Waiting</summary>
 
 * `SynchConsoleOutput::PutChar()`
   * `Acquire()`, `Release()` wraps critical section
@@ -559,3 +562,4 @@ Thread::Sleep (bool finishing)
 * `Scheduler::Run()`
 
   See previous chapters
+</details>
