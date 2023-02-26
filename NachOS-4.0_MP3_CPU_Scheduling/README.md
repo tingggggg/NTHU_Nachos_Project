@@ -193,3 +193,208 @@ Scheduler::ReadyToRun (Thread *thread)
     readyList->Append(thread);
 }
 ```
+
+***
+
+### Running -> Ready
+
+`AddrSpace::Execute` will call `kernel_machine->Run()` (jump to the user program)
+
+```cc
+void 
+AddrSpace::Execute(char* fileName) 
+{
+
+    kernel->currentThread->space = this;
+
+    this->InitRegisters();		// set the initial register values
+    this->RestoreState();		// load page table register
+
+    kernel->machine->Run();		// jump to the user progam
+
+    ASSERTNOTREACHED();			// machine->Run never returns;
+					// the address space exits
+					// by doing the syscall "exit"
+}
+```
+
+* `Machine::Run()`
+  * Run user program in `user mode`
+  * Infinite loop
+    * Decode the user program (instruction)
+    * `OneTick` to simulate system/user clock time
+
+```cc
+void
+Machine::Run()
+{
+    Instruction *instr = new Instruction;  // storage for decoded instruction
+
+    if (debug->IsEnabled('m')) {
+        cout << "Starting program in thread: " << kernel->currentThread->getName();
+		cout << ", at time: " << kernel->stats->totalTicks << "\n";
+    }
+    kernel->interrupt->setStatus(UserMode);
+    for (;;) {
+        OneInstruction(instr);
+		kernel->interrupt->OneTick();
+		if (singleStep && (runUntilTime <= kernel->stats->totalTicks))
+	  		Debugger();
+    }
+}
+```
+
+* `Interrupt::OneTick()`
+  * `CheckIfDue` check any pending interrupts are now ready to fire
+  * `yieldOnReturn` if the timer device handler asked for a context switch, ok to do it now
+  * `kernel->currentThread->Yield()` makes currentThread executed `Yield` and give up CPU resources
+```cc
+void
+Interrupt::OneTick()
+{
+    MachineStatus oldStatus = status;
+    Statistics *stats = kernel->stats;
+
+// advance simulated time
+    if (status == SystemMode) {
+        stats->totalTicks += SystemTick;
+	stats->systemTicks += SystemTick;
+    } else {
+	stats->totalTicks += UserTick;
+	stats->userTicks += UserTick;
+    }
+    DEBUG(dbgInt, "== Tick " << stats->totalTicks << " ==");
+
+// check any pending interrupts are now ready to fire
+    ChangeLevel(IntOn, IntOff);	// first, turn off interrupts
+				// (interrupt handlers run with
+				// interrupts disabled)
+    CheckIfDue(FALSE);		// check for pending interrupts
+    ChangeLevel(IntOff, IntOn);	// re-enable interrupts
+    if (yieldOnReturn) {	// if the timer device handler asked 
+    				// for a context switch, ok to do it now
+	yieldOnReturn = FALSE;
+ 	status = SystemMode;		// yield is a kernel routine
+	kernel->currentThread->Yield();
+	status = oldStatus;
+    }
+}
+```
+
+* `Thread::Yield()`
+
+  The purpose is to switch threads
+
+  * Disable interrupt
+  * `Scheduler`
+    * Find next thread in ready list
+    * Add current thread to the ready list
+    * Run the next thread
+  * Enable interrupt
+
+```cc
+void
+Thread::Yield ()
+{
+    Thread *nextThread;
+    IntStatus oldLevel = kernel->interrupt->SetLevel(IntOff);
+    
+    ASSERT(this == kernel->currentThread);
+    
+    DEBUG(dbgThread, "Yielding thread: " << name);
+    
+    nextThread = kernel->scheduler->FindNextToRun();
+    if (nextThread != NULL) {
+	kernel->scheduler->ReadyToRun(this);
+	kernel->scheduler->Run(nextThread, FALSE);
+    }
+    (void) kernel->interrupt->SetLevel(oldLevel);
+}
+```
+
+* `Scheduler::FindNextToRun()`
+  * Return the next thread to be scheduled onto the CPU
+  * If there are no ready threads, return NULL
+
+```cc
+Thread *
+Scheduler::FindNextToRun ()
+{
+    ASSERT(kernel->interrupt->getLevel() == IntOff);
+
+    if (readyList->IsEmpty()) {
+		return NULL;
+    } else {
+    	return readyList->RemoveFront();
+    }
+}
+```
+
+* `Scheduler::ReadyToRun()`
+  * Mark a thread as ready, but not running, then put it on the ready list, for later scheduling onto the CPU.
+```cc
+void
+Scheduler::ReadyToRun (Thread *thread)
+{
+    ASSERT(kernel->interrupt->getLevel() == IntOff);
+    DEBUG(dbgThread, "Putting thread on ready list: " << thread->getName());
+	//cout << "Putting thread on ready list: " << thread->getName() << endl ;
+    thread->setStatus(READY);
+    readyList->Append(thread);
+}
+```
+
+* `Scheduler::Run()`
+  * Dispatch the CPU to nextThread.  
+  * Save the state of the old thread, and load the state of the new thread, by calling the machine dependent context switch routine, `SWITCH`.
+
+```cc
+void
+Scheduler::Run (Thread *nextThread, bool finishing)
+{
+    Thread *oldThread = kernel->currentThread;
+    
+    ASSERT(kernel->interrupt->getLevel() == IntOff);
+
+    if (finishing) {	// mark that we need to delete current thread
+         ASSERT(toBeDestroyed == NULL);
+	 toBeDestroyed = oldThread;
+    }
+    
+    if (oldThread->space != NULL) {	// if this thread is a user program,
+        oldThread->SaveUserState(); 	// save the user's CPU registers
+	oldThread->space->SaveState();
+    }
+    
+    oldThread->CheckOverflow();		    // check if the old thread
+					    // had an undetected stack overflow
+
+    kernel->currentThread = nextThread;  // switch to the next thread
+    nextThread->setStatus(RUNNING);      // nextThread is now running
+    
+    DEBUG(dbgThread, "Switching from: " << oldThread->getName() << " to: " << nextThread->getName());
+    
+    // This is a machine-dependent assembly language routine defined 
+    // in switch.s.  You may have to think
+    // a bit to figure out what happens after this, both from the point
+    // of view of the thread and from the perspective of the "outside world".
+
+    SWITCH(oldThread, nextThread);
+
+    // we're back, running oldThread
+      
+    // interrupts are off when we return from switch!
+    ASSERT(kernel->interrupt->getLevel() == IntOff);
+
+    DEBUG(dbgThread, "Now in thread: " << oldThread->getName());
+
+    CheckToBeDestroyed();		// check if thread we were running
+					// before this one has finished
+					// and needs to be cleaned up
+    
+    if (oldThread->space != NULL) {	    // if there is an address space
+        oldThread->RestoreUserState();     // to restore, do it.
+	oldThread->space->RestoreState();
+    }
+}
+```
