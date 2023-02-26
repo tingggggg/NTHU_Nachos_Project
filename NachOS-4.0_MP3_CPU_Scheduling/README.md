@@ -398,3 +398,150 @@ Scheduler::Run (Thread *nextThread, bool finishing)
     }
 }
 ```
+
+***
+
+### Running -> Waiting
+
+* `SynchConsoleOutput::PutChar()`
+  * `Acquire()`, `Release()` wraps critical section
+  * `ConsoleOutput::PutChar()` put `this` into interrupt pending list (in order to wait to be able to executed `ConsoleOutput::CallBack()`)
+  * `callWhenDone` interrupt handler to call when the next char can be put
+    * `SynchConsoleInput::CallBack()` increment semaphore value, waking up a waiter if necessary
+
+
+```cc
+void
+SynchConsoleOutput::PutChar(char ch)
+{
+    lock->Acquire();
+    consoleOutput->PutChar(ch);
+    waitFor->P();
+    lock->Release();
+}
+
+void
+ConsoleOutput::PutChar(char ch)
+{
+    ASSERT(putBusy == FALSE);
+    WriteFile(writeFileNo, &ch, sizeof(char));
+    putBusy = TRUE;
+    kernel->interrupt->Schedule(this, ConsoleTime, ConsoleWriteInt);
+}
+
+void
+Interrupt::Schedule(CallBackObj *toCall, int fromNow, IntType type)
+{
+    int when = kernel->stats->totalTicks + fromNow;
+    PendingInterrupt *toOccur = new PendingInterrupt(toCall, when, type);
+
+    DEBUG(dbgInt, "Scheduling interrupt handler the " << intTypeNames[type] << " at time = " << when);
+    ASSERT(fromNow > 0);
+
+    pending->Insert(toOccur);
+}
+
+void
+ConsoleOutput::CallBack()
+{
+    putBusy = FALSE;
+    kernel->stats->numConsoleCharsWritten++;
+    callWhenDone->CallBack();
+}
+void
+SynchConsoleInput::CallBack()
+{
+    waitFor->V();
+}
+```
+
+* `Semaphore::P()`
+  * Wait until semaphore value > 0, then decrement Checking the value and decrementing must be done atomically
+  * We need to disable interrupts before checking the value
+
+```cc
+void
+Semaphore::P()
+{
+    Interrupt *interrupt = kernel->interrupt;
+    Thread *currentThread = kernel->currentThread;
+    
+    // disable interrupts
+    IntStatus oldLevel = interrupt->SetLevel(IntOff);	
+    
+    while (value == 0) { 		// semaphore not available
+	queue->Append(currentThread);	// so go to sleep
+	currentThread->Sleep(FALSE);
+    } 
+    value--; 			// semaphore available, consume its value
+   
+    // re-enable interrupts
+    (void) interrupt->SetLevel(oldLevel);	
+}
+```
+
+* `SyncList<T>::Append()`
+  * Singly linked-list
+  * 
+
+```cc
+template <class T>
+class ListElement {
+  public:
+    ListElement(T itm); 	// initialize a list element
+    ListElement *next;	     	// next element on list, NULL if this is last
+    T item; 	   	     	// item on the list
+};
+
+template <class T>
+void
+List<T>::Append(T item)
+{
+    ListElement<T> *element = new ListElement<T>(item);
+
+    ASSERT(!this->IsInList(item));
+    if (IsEmpty()) {		// list is empty
+	first = element;
+	last = element;
+    } else {			// else put it after last
+	last->next = element;
+	last = element;
+    }
+    numInList++;
+    ASSERT(this->IsInList(item));
+}
+```
+
+* `Thread::Sleep`
+  * Let the thread status waiting for `semaphore` value be changed to `block`
+    * If there is a next thread, find it and execute
+    * If there is no next thread, goto `Idle`
+      * Check for any pending interrupts. If there are no pending interrupts, stop
+```cc
+void
+Thread::Sleep (bool finishing)
+{
+    Thread *nextThread;
+    
+    ASSERT(this == kernel->currentThread);
+    ASSERT(kernel->interrupt->getLevel() == IntOff);
+    
+    DEBUG(dbgThread, "Sleeping thread: " << name);
+
+    status = BLOCKED;
+	//cout << "debug Thread::Sleep " << name << "wait for Idle\n";
+    while ((nextThread = kernel->scheduler->FindNextToRun()) == NULL) {
+		kernel->interrupt->Idle();	// no one to run, wait for an interrupt
+	}    
+    // returns when it's time for us to run
+    kernel->scheduler->Run(nextThread, finishing); 
+}
+```
+
+* `Scheduler::FindNextToRun()`
+  
+  See previous chapters
+  
+* `Scheduler::Run()`
+
+  See previous chapters
