@@ -6,7 +6,9 @@
 - [ ] All processes must have a valid **scheduling priority between 0 to 149**. Higher value means higher priority. So 149 is the highest priority, and 0 is the lowest priority.
 - [ ] A process with priority between **0~49 is in L3** queue. A process with priority between **50~99 is in L2** queue. A process with priority between **100~149 is in L1** queue.
 - [ ] **L1 queue uses preemptive SJF** (shortest job first) scheduling algorithm. If current thread has the lowest approximate burst time, it should not be preempted by the threads in ready queue. The job execution time is approximated using the equation:
+
 $$ t_i = 0.5 * T + 0.5 * t_{i - 1} $$
+
 - [ ] **L2 queue uses non-preemptive priority** scheduling algorithm. If current thread has the highest priority, it should not be preempted by the threads in ready queue.
 - [ ] **L3 queue uses round-robin** scheduling algorithm with time quantum 100 ticks .
 - [ ] An **aging mechanism** must be implemented, so that the priority of a process is **increased by 10 after waiting for more than 1500 ticks (The operations of preemption and priority updating can be delayed until the next timer alarm interval)**.
