@@ -129,9 +129,9 @@ class Thread {
     The main use time is for `preempt`
 
   ```cc
-  int get_level_of_queue() {
-    return this->priority >= 100 ? 1 : (this->priority >= 50 ? 2 : 3);
-  }
+    int get_level_of_queue() {
+      return this->priority >= 100 ? 1 : (this->priority >= 50 ? 2 : 3);
+    }
   ```
 
   * `Thread::update_burst_time()`
