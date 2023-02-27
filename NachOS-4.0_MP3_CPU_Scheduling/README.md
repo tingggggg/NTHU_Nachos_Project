@@ -140,6 +140,7 @@ $$ t_i = 0.5 * T + 0.5 * t_{i - 1} $$
     Update approximate cpu burst time by formula $ x = 0.5 * T + 0.5 * T_{i - 1} $
 
   ```cc
+
   void
   Thread::update_burst_time(int cpu_end_ticks)
   {
@@ -156,7 +157,7 @@ $$ t_i = 0.5 * T + 0.5 * t_{i - 1} $$
   }
   ```
 
-### Modified function in `thread.cc / .h`
+### Modified function in `thread.cc`
 
 * `Thread::Yield()`
 
@@ -204,6 +205,37 @@ Thread::Yield ()
 }
 ```
 
+* `Thread::Sleep()`
+
+  Relinquish the CPU, because the current thread has either finished or is **blocked waiting** on a synchronization variable (Semaphore, Lock, or Condition)
+
+  * If current thread will enter the `WAIT` state, update approximate burst time of current thread
+  * Find next thread function `FindNextToRun()` replaced with `Scheduling()`
+
+```diff
+void
+Thread::Sleep (bool finishing)
+{
+    Thread *nextThread;
+    ...
+    status = BLOCKED;
+
++    // current thread not finishing yet
++    if (finishing == FALSE) {
++        this->update_burst_time(kernel->stats->totalTicks);
++    }
+
++    while ((nextThread = kernel->scheduler->Scheduling()) == NULL) {
++        kernel->interrupt->Idle();
++    }
++    kernel->scheduler->Run(nextThread, finishing);
+
+-    while ((nextThread = kernel->scheduler->FindNextToRun()) == NULL) {
+-		kernel->interrupt->Idle();	// no one to run, wait for an interrupt
+-	 }    
+-    kernel->scheduler->Run(nextThread, finishing); 
+}
+```
 
 
 ## Trace Code
