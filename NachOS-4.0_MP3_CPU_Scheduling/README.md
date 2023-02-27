@@ -349,6 +349,149 @@ class Scheduler {
   }
   ```
 
+  * `Scheduler::Scheduling()`
+    * According multi-level feedback queue rule, the priority from high to low is L1 -> L2 -> L3
+    * Return `NULL` if there are no any thread in 3-levels ready queue 
+    * `record_start_ticks()` to record the time ticks to be dispatched CPU resources for next thread
+
+  ```cc
+  Thread*
+  Scheduler::Scheduling()
+  {
+      ASSERT(kernel->interrupt->getLevel() == IntOff);
+
+      Thread *nextThread;
+
+      #ifdef DEBUG_QUEUES
+      ListAllThread();
+      #endif
+      
+      if (!L1List->IsEmpty()) {
+          // Pick a thread from L1 ready queue (SJF)
+
+          nextThread = L1List->RemoveFront();
+          nextThread->record_start_ticks(kernel->stats->totalTicks);
+
+          return nextThread;
+      } else {
+          if (!L2List->IsEmpty()) {
+              // Pick a thread from L2 ready queue (non-preemptive priority)
+
+              nextThread = L2List->RemoveFront();
+              nextThread->record_start_ticks(kernel->stats->totalTicks);
+
+              return nextThread;
+          } else {
+              if (!L3List->IsEmpty()) {
+                  // Pick a thread from L3 ready queue (Round-Robin)
+
+                  nextThread = L3List->RemoveFront();
+                  nextThread->record_start_ticks(kernel->stats->totalTicks);
+
+                  return nextThread;
+              } else {
+                  // There is no thread in the 3-levels ready queues
+                  return NULL;
+              }
+          }
+      }
+
+      return nextThread;
+  }
+  ```
+
+  * `Scheduler::Aging()`
+    * The waiting time of threads waiting for CPU is increased (`totalTicks` - `start_wait_ticks`)
+    * Check each thread, wait more than 1500 ticks thread priority increased by 10
+      * The maximum limit of priority is `149`
+      * Reduce the accumulated waiting time (`-1500`)
+
+  ```cc
+  void
+  Scheduler::Aging()
+  {
+      Thread *thread;
+      int totalTicks = kernel->stats->totalTicks;
+
+      if (!L1List->IsEmpty()) {
+          ListIterator<Thread*> *it;
+          it = new ListIterator<Thread*> (L1List);
+          for (; !it->IsDone(); it->Next()) {
+              thread = it->Item();
+
+              thread->accu_wait_ticks += totalTicks - thread->start_wait_ticks;
+              thread->start_wait_ticks = totalTicks;
+
+              if (thread->accu_wait_ticks >= 1500) {
+                  // L1 queue limit of priority is 149
+                  thread->priority = min(149, thread->priority + 10); 
+                  thread->accu_wait_ticks -= 1500;
+              } 
+          }
+      }
+
+      if (!L2List->IsEmpty()) {
+          ...
+      }
+
+      if (!L3List->IsEmpty()) {
+          ...
+      }
+  }
+  ```
+
+  * `Scheduler::ReArrangeThreads()`
+
+    Check if the thread needs to be migrated to the higher level ready queue
+
+    * `ListIterator` iterate through L2, L3 list, if the priority of a thread exceeds its "upper limit in the queue", remove it and insert to where it should go.
+
+    * thread in L3 migrated to L2 or L1
+    * thread in L2 migrated to L1
+    * `CheckPreempt()` is used to check whether there is a preemptive situation pending after the migrate thread
+
+  ```cc
+  void
+  Scheduler::ReArrangeThreads()
+  {   
+      Thread *migrated_thread;
+
+      ListIterator<Thread*> *it3;
+
+      it3 = new ListIterator<Thread*> (L3List);
+      for (; !it3->IsDone(); it3->Next()) {
+          migrated_thread = L3List->RemoveFront();
+
+          if (migrated_thread->priority >= 100) {
+              L1List->Insert(migrated_thread);
+              
+              int statusCheckPreempt = this->CheckPreempt(migrated_thread);
+              if (statusCheckPreempt) break;
+          } else if (migrated_thread->priority >= 50) {
+              L2List->Insert(migrated_thread);
+
+              int statusCheckPreempt = this->CheckPreempt(migrated_thread);
+              if (statusCheckPreempt) break;
+          } else {
+              L3List->Append(migrated_thread);
+          }
+      }
+
+      ListIterator<Thread*> *it2;
+      it2 = new ListIterator<Thread*> (L2List);
+      for (; !it2->IsDone(); it2->Next()) {
+          if (it2->Item()->priority >= 100) {
+              migrated_thread = L2List->RemoveFront();
+
+              L1List->Insert(migrated_thread);
+
+              int statusCheckPreempt = this->CheckPreempt(migrated_thread);
+              if (statusCheckPreempt) break;
+          }
+      }
+  }
+  ```
+
 ## Trace Code
 
 <details>
