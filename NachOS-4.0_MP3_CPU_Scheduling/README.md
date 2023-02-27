@@ -237,6 +237,49 @@ Thread::Sleep (bool finishing)
 }
 ```
 
+### New additions in `scheduler.cc / .h`
+
+* `scheduler.h`
+
+  * members
+    * `L1List`: preemptive SJF(shortest job first), sorted list - low burst time first
+    * `L2List`: non-preemptive priority, sorted list - high priority first
+    * `L3List`: round-robin, list
+
+  * member functions
+    * `Aging()`: Execute the aging of threads in the 3-levels ready queue
+    * `Scheduling()`: Find the next thread to be executed
+    * `AddToQueue(Thread* thread, int priority)`: Mark a thread as ready, but not running. Put it on the ready list, for later scheduling onto the CPU (according input `priority`)
+    * `ReArrangeThreads()`: Check the result of `Aging()` and decide whether to migrate thread to the next level ready queue
+    * `CheckPreempt(Thread *thread)`: Check current thread in CPU whether be preempted when another thread that migrated to new level ready queue
+
+```cc
+class Scheduler {
+  public:
+    ...
+    void Aging();
+    Thread* Scheduling();
+    void AddToQueue(Thread *thread, int priority);
+    void ReArrangeThreads();
+    int CheckPreempt(Thread *thread);
+
+    // for debug
+    void ListAllThread();
+
+  private:
+    SortedList<Thread *> *L1List; // preemptive SJF
+    SortedList<Thread *> *L2List; // non-preemptive priority
+    List<Thread *> *L3List;       // round-robin (100 ticks)
+    ...
+};
+
+```
+
+* `scheduler.cc`
+  
+```cc
+
+```
 
 ## Trace Code
 
