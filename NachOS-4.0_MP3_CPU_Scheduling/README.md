@@ -79,22 +79,22 @@ $$ t_i = 0.5 * T + 0.5 * t_{i - 1} $$
 
 * `thread.h`
   
-  members
-  * `approx_burst_time`: approximate burst time
-  * `last_approx_burst_time`: previous approximate burst time
-  * `true_ticks`: actual CPU burst time
-  * `cpu_start_ticks`: thread be dispatched CPU time
-  * `cpu_end_ticks`: thread sleep CPU time
-  * `accu_wait_ticks`: time accumulated in ready-queue
-  * `start_wait_ticks`: thread in READY state time
-  * `priority`: priority of thread
+  * members
+    * `approx_bur st_time`: approximate burst time
+    * `last_approx_burst_time`: previous approximate burst time
+    * `true_ticks`: actual CPU burst time
+    * `cpu_start_ticks`: thread be dispatched CPU time
+    * `cpu_end_ticks`: thread sleep CPU time
+    * `accu_wait_ticks`: time accumulated in ready-queue
+    * `start_wait_ticks`: thread in READY state time
+    * `priority`: priority of thread
 
-  member functions
-  * `get_level_of_queue()` ???
-  * `set_wait_start_time(int tick)`
-  * `get_wait_time()`
-  * `record_start_ticks(int cpu_start_ticks)`
-  * `update_burst_time(int cpu_end_ticks)`
+  * member functions
+    * `get_level_of_queue()`: get ready-queue level of thread
+    * `set_wait_start_time(int tick)`: set the time when thread starts waiting
+    * `get_wait_time()`: get how long thread has waited in total
+    * `record_start_ticks(int cpu_start_ticks)`: set the time when thread dispatched CPU 
+    * `update_burst_time(int cpu_end_ticks)`: update approximate burst time throught the formula
 
 
   ```cc
@@ -124,15 +124,22 @@ $$ t_i = 0.5 * T + 0.5 * t_{i - 1} $$
   ```
 
 * `thread.cc`
+  
+  * `Thread::get_level_of_queue()`
+
+    The main use time is for `preempt`
 
   ```cc
-  void
-  Thread::record_start_ticks(int cpu_start_ticks)
-  {
-      ASSERT(cpu_start_ticks >= 0);
-      this->cpu_start_ticks = cpu_start_ticks;
+  int get_level_of_queue() {
+    return this->priority >= 100 ? 1 : (this->priority >= 50 ? 2 : 3);
   }
+  ```
 
+  * `Thread::update_burst_time()`
+
+    Update approximate cpu burst time by formula $ x = 0.5 * T + 0.5 * T_{i - 1} $
+
+  ```cc
   void
   Thread::update_burst_time(int cpu_end_ticks)
   {
@@ -148,6 +155,55 @@ $$ t_i = 0.5 * T + 0.5 * t_{i - 1} $$
       this->true_ticks = 0; // reset
   }
   ```
+
+### Modified function in `thread.cc / .h`
+
+* `Thread::Yield()`
+
+  Context switch accompanied by execution `Yield()`(Relinquish the CPU if any other thread is ready to run)
+
+  The original `nachOS` uses round-robin scheduling, fixed 100 ticks to trigger a Timer Interrupt.
+  `Interrupt::OneTick()` to induce the current thread of the cpu to call the `Yield()` function, which means: give up the cpu and let the next thread executed
+
+  * Now there are 3-levels ready-queue (L1 (preemptive SJF), L2 (non-preemptive priority) and L3 (Round-Robin)). Only when the current thread belongs to L3 queue. scheduling needs to be done here (`Yield()`)
+  * Every time `Yield()` is executed, it means that 100 ticks have passed. So fixed execute the following:
+    * `Aging()`: Modify the priority of thread according time accumulated in ready-queue
+    * `ReArrangeThreads()`: Check whether to increase the ready-queue level of the thread (according `Aging()`) 
+
+```diff
+void
+Thread::Yield ()
+{
+    Thread *nextThread;
+    IntStatus oldLevel = kernel->interrupt->SetLevel(IntOff);
+    
+    ASSERT(this == kernel->currentThread);
+    
+    DEBUG(dbgThread, "Yielding thread: " << name);
+    DEBUG(dbgSch, "[Thread::Yield], totalTicks: " << kernel->stats->totalTicks);
+    
++    kernel->scheduler->Aging();
++    kernel->scheduler->ReArrangeThreads();
+
++    // Call Scheduling if CPU is running Job in L3 (round-robin)
++    if (kernel->currentThread->get_level_of_queue() == 3) {
++        nextThread = kernel->scheduler->Scheduling();
++        if (nextThread != NULL) {
++            kernel->scheduler->AddToQueue(this, this->priority);
++            kernel->scheduler->Run(nextThread, FALSE);
++        }
++    }
+
+-    nextThread = kernel->scheduler->FindNextToRun();
+-    if (nextThread != NULL) {
+-      kernel->scheduler->ReadyToRun(this);
+-      kernel->scheduler->Run(nextThread, FALSE);
+-    }
+
+    (void) kernel->interrupt->SetLevel(oldLevel);
+}
+```
+
 
 
 ## Trace Code
