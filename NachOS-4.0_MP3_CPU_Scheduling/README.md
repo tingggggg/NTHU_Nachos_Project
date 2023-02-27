@@ -137,8 +137,8 @@ class Thread {
   * `Thread::update_burst_time()`
 
     Update approximate cpu burst time by formula 
-    
-    $$ x = 0.5 * T + 0.5 * T_{i - 1} $$
+
+      $$ x = 0.5 * T + 0.5 * T_{i - 1} $$
 
   ```cc
 
