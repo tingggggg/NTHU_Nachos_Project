@@ -96,9 +96,8 @@ $$ t_i = 0.5 * T + 0.5 * t_{i - 1} $$
     * `record_start_ticks(int cpu_start_ticks)`: set the time when thread dispatched CPU 
     * `update_burst_time(int cpu_end_ticks)`: update approximate burst time throught the formula
 
-
-  ```cc
-  class Thread {
+```cc
+class Thread {
     ...
 
   public:
@@ -121,7 +120,7 @@ $$ t_i = 0.5 * T + 0.5 * t_{i - 1} $$
     
     ...
   }
-  ```
+```
 
 * `thread.cc`
   
