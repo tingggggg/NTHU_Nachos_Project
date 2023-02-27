@@ -276,9 +276,78 @@ class Scheduler {
 
 * `scheduler.cc`
   
-```cc
+  * `Scheduler::Scheduler()` 
+    
+    Initial the 3-levels ready queue in `scheduler` constructor
 
-```
+    * L1List: create list with `L1SchedulingComp`, low burst time first
+    * L2List: create list with `L2SchedulingComp`, high priority first
+
+  ```cc
+  static int
+  L1SchedulingComp (Thread *x, Thread *y)
+  {
+      if (x->approx_burst_time < y->approx_burst_time) {
+          return -1;
+      } else if (x->approx_burst_time > y->approx_burst_time) {
+          return 1;
+      } else {
+          return x->getID() < y->getID() ? -1 : 1;
+      }
+  }
+
+  static int
+  L2SchedulingComp (Thread *x, Thread *y)
+  {
+      if (x->priority < y->priority) {
+          return 1;
+      } else if (x->priority > y->priority) {
+          return -1;
+      } else {
+          return x->getID() < y->getID() ? -1 : 1;
+      }
+  }
+
+  Scheduler::Scheduler()
+  { 
+      readyList = new List<Thread *>; 
+      toBeDestroyed = NULL;
+
+      // Initial 3-levels ready-queues
+      L1List = new SortedList<Thread *>(L1SchedulingComp);
+      L2List = new SortedList<Thread *>(L2SchedulingComp);
+      L3List = new List<Thread *>;
+  } 
+  ```
+
+  * `Scheduler::AddToQueue()`
+    * Set the start time of thread (for aging mechanism)
+    * Set the thread status to `READY`
+    * Put the thread into the corresponding ready queue according to the priority
+
+  ```cc
+  void
+  Scheduler::AddToQueue (Thread *thread, int priority)
+  {
+      // Set start time of thread for aging mechanism
+      thread->set_wait_start_time(kernel->stats->totalTicks);
+
+      thread->setStatus(READY);
+      if (priority >= 100) {
+          DEBUG(dbgSch, "[AddToQueue] Tick ["<< kernel->stats->totalTicks<<"]: " << \
+                                    "Thread ["<< thread->ID <<"] is inserted into queueL[1]" );
+          L1List->Insert(thread);
+      } else if (priority >= 50) {
+          DEBUG(dbgSch, "[AddToQueue] Tick ["<< kernel->stats->totalTicks<<"]: " << \
+                                    "Thread ["<< thread->ID <<"] is inserted into queueL[2]" );
+          L2List->Insert(thread);
+      } else {
+          DEBUG(dbgSch, "[AddToQueue] Tick ["<< kernel->stats->totalTicks<<"]: " << \
+                                    "Thread ["<< thread->ID <<"] is inserted into queueL[3]" );
+          L3List->Append(thread);
+      }
+  }
+  ```
 
 ## Trace Code
 
