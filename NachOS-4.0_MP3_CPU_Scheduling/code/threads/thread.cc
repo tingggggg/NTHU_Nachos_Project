@@ -46,6 +46,33 @@ Thread::Thread(char* threadName, int threadID)
 					// of machine registers
     }
     space = NULL;
+    priority = 0; // default
+    approx_burst_time = 0; // t0 = 0
+    cpu_start_ticks = cpu_end_ticks = 0;
+
+    accu_wait_ticks = 0;
+    start_wait_ticks = 0;
+}
+
+Thread::Thread(char* threadName, int threadID, int _priority)
+{
+    ID = threadID;
+    name = threadName;
+    stackTop = NULL;
+    stack = NULL;
+    status = JUST_CREATED;
+    for (int i = 0; i < MachineStateSize; i++) {
+	machineState[i] = NULL;		// not strictly necessary, since
+					// new thread ignores contents 
+					// of machine registers
+    }
+    space = NULL;
+    priority = _priority; // default
+    approx_burst_time = 0; // t0 = 0
+    cpu_start_ticks = cpu_end_ticks = 0;
+
+    accu_wait_ticks = 0;
+    start_wait_ticks = 0;
 }
 
 //----------------------------------------------------------------------
@@ -99,8 +126,13 @@ Thread::Fork(VoidFunctionPtr func, void *arg)
     StackAllocate(func, arg);
 
     oldLevel = interrupt->SetLevel(IntOff);
-    scheduler->ReadyToRun(this);	// ReadyToRun assumes that interrupts 
-					// are disabled!
+
+    scheduler->AddToQueue(this, this->priority);
+
+    // Original
+    // scheduler->ReadyToRun(this);	// ReadyToRun assumes that interrupts 
+	// 				// are disabled!
+
     (void) interrupt->SetLevel(oldLevel);
 } 
 
@@ -240,12 +272,26 @@ Thread::Yield ()
     ASSERT(this == kernel->currentThread);
     
     DEBUG(dbgThread, "Yielding thread: " << name);
+    DEBUG(dbgSch, "[Thread::Yield], totalTicks: " << kernel->stats->totalTicks);
     
-    nextThread = kernel->scheduler->FindNextToRun();
-    if (nextThread != NULL) {
-	kernel->scheduler->ReadyToRun(this);
-	kernel->scheduler->Run(nextThread, FALSE);
+    kernel->scheduler->Aging();
+    kernel->scheduler->ReArrangeThreads();
+
+    // Call Scheduling if CPU is running Job in L3 (round-robin)
+    if (kernel->currentThread->get_level_of_queue() == 3) {
+        nextThread = kernel->scheduler->Scheduling();
+        if (nextThread != NULL) {
+            kernel->scheduler->AddToQueue(this, this->priority);
+            kernel->scheduler->Run(nextThread, FALSE);
+        }
     }
+
+    // nextThread = kernel->scheduler->FindNextToRun();
+    // if (nextThread != NULL) {
+	// kernel->scheduler->ReadyToRun(this);
+	// kernel->scheduler->Run(nextThread, FALSE);
+    // }
+
     (void) kernel->interrupt->SetLevel(oldLevel);
 }
 
@@ -280,12 +326,25 @@ Thread::Sleep (bool finishing)
     DEBUG(dbgThread, "Sleeping thread: " << name);
 
     status = BLOCKED;
-	//cout << "debug Thread::Sleep " << name << "wait for Idle\n";
-    while ((nextThread = kernel->scheduler->FindNextToRun()) == NULL) {
-		kernel->interrupt->Idle();	// no one to run, wait for an interrupt
-	}    
-    // returns when it's time for us to run
-    kernel->scheduler->Run(nextThread, finishing); 
+
+    // current thread not finishing yet
+    if (finishing == FALSE) {
+        this->update_burst_time(kernel->stats->totalTicks);
+        // kernel->scheduler->AddToQueue(this, this->priority);
+    }
+
+    DEBUG(dbgSch, "[Thread::Sleep], finishing: " << finishing);
+
+    while ((nextThread = kernel->scheduler->Scheduling()) == NULL) {
+        kernel->interrupt->Idle();
+    }
+    kernel->scheduler->Run(nextThread, finishing);
+
+    // Original
+    // while ((nextThread = kernel->scheduler->FindNextToRun()) == NULL) {
+	// 	kernel->interrupt->Idle();	// no one to run, wait for an interrupt
+	// }    
+    // kernel->scheduler->Run(nextThread, finishing); 
 }
 
 //----------------------------------------------------------------------

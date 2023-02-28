@@ -82,6 +82,7 @@ class Thread {
 
   public:
     Thread(char* debugName, int threadID);		// initialize a Thread 
+    Thread(char* debugName, int thread, int _priority);
     ~Thread(); 				// deallocate a Thread
 					// NOTE -- thread being deleted
 					// must not be running when delete 
@@ -126,6 +127,8 @@ class Thread {
     void update_burst_time(int cpu_end_ticks);
     /* --                                                    -- */
 
+    int   ID;
+    
   private:
     // some of the private data for this class is listed above
     
@@ -134,7 +137,7 @@ class Thread {
 				// (If NULL, don't deallocate stack)
     ThreadStatus status;	// ready, running or blocked
     char* name;
-	int   ID;
+	
     void StackAllocate(VoidFunctionPtr func, void *arg);
     				// Allocate a stack for thread.
 				// Used internally by Fork()
