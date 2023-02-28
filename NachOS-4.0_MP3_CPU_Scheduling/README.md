@@ -492,6 +492,69 @@ class Scheduler {
   }
   ```
 
+  * `Scheduler::CheckPreempt()`
+
+    There are three situations that require preemption
+
+    * case1:  
+    current thread belongs to L3, but suddenly a thread is added to L1 or L2
+
+    * case2:  
+    current thread belongs to L2, but suddenly a thread is added to L1
+
+    * case3:  
+    current thread belongs to L1, but suddenly a thread that approximated burst time smaller than current thread is added to L1
+
+    * operations:
+      * Update actual burst time of current thread
+      * Call `Scheduling()` to get next thread
+      * Current thread is added to ready queue to waiting CPU resources
+      * Call `Run()` to switch thread
+
+  ```cc
+  int
+  Scheduler::CheckPreempt(Thread *thread)
+  {
+      if (kernel->currentThread->get_level_of_queue() == 3 && \
+          (thread->get_level_of_queue() == 2 || thread->get_level_of_queue() == 1)) {
+          DEBUG(dbgSch, "[CheckPreempt] case 1");
+
+          kernel->currentThread->true_ticks += kernel->stats->totalTicks - kernel->currentThread->cpu_start_ticks;
+
+          Thread *nextThread = this->Scheduling();
+
+          this->AddToQueue(kernel->currentThread, kernel->currentThread->priority);
+          this->Run(nextThread, FALSE);
+          return 1;
+      } else if (kernel->currentThread->get_level_of_queue() == 2 && \
+                thread->get_level_of_queue() == 1) {
+          DEBUG(dbgSch, "[CheckPreempt] case 2");
+
+          kernel->currentThread->true_ticks += kernel->stats->totalTicks - kernel->currentThread->cpu_start_ticks;
+
+          Thread *nextThread = this->Scheduling();
+
+          this->AddToQueue(kernel->currentThread, kernel->currentThread->priority);
+          this->Run(nextThread, FALSE);
+          return 1;
+      } else if (kernel->currentThread->get_level_of_queue() == 1 && \
+                thread->get_level_of_queue() == 1 && \
+                (thread->approx_burst_time < kernel->currentThread->approx_burst_time)) {
+          DEBUG(dbgSch, "[CheckPreempt] case 3");
+
+          kernel->currentThread->true_ticks += kernel->stats->totalTicks - kernel->currentThread->cpu_start_ticks;
+
+          Thread *nextThread = this->Scheduling();
+
+          this->AddToQueue(kernel->currentThread, kernel->currentThread->priority);
+          this->Run(nextThread, FALSE);
+          return 1;
+      } else {
+          return 0;
+      }
+  }
+  ```
+
 ## Trace Code
 
 <details>
