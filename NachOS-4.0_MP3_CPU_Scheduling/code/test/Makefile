@@ -113,10 +113,10 @@ PROGRAMS = unknownhost
 else
 # change this if you create a new test program!
 #PROGRAMS = add halt shell matmult sort segments test1 test2 a
-PROGRAMS = add halt createFile consoleIO_test1 consoleIO_test2 fileIO_test1 fileIO_test2 hw3t1 hw3t2 hw3t3
+PROGRAMS = add halt createFile consoleIO_test1 consoleIO_test2 fileIO_test1 fileIO_test2 hw3t1 hw3t2 hw3t3 hw3t4
 endif
 
-binaries=halt createFile add shell sort segments matmult consoleIO_test1 consoleIO_test2 fileIO_test1 fileIO_test2 hw3t1 hw3t2 hw3t3
+binaries=halt createFile add shell sort segments matmult consoleIO_test1 consoleIO_test2 fileIO_test1 fileIO_test2 hw3t1 hw3t2 hw3t3 hw3t4
 
 all: $(PROGRAMS)
 
@@ -207,6 +207,12 @@ hw3t3.o: hw3t3.c
 hw3t3: hw3t3.o start.o
 	$(LD) $(LDFLAGS) start.o hw3t3.o -o hw3t3.coff
 	$(COFF2NOFF) hw3t3.coff hw3t3
+
+hw3t4.o: hw3t4.c
+	$(CC) $(CFLAGS) -c hw3t4.c
+hw3t4: hw3t4.o start.o
+	$(LD) $(LDFLAGS) start.o hw3t4.o -o hw3t4.coff
+	$(COFF2NOFF) hw3t4.coff hw3t4
 
 clean:
 	$(RM) -f *.o *.ii $(binaries)
