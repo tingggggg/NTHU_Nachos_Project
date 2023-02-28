@@ -31,7 +31,7 @@ L1SchedulingComp (Thread *x, Thread *y)
     } else if (x->approx_burst_time > y->approx_burst_time) {
         return 1;
     } else {
-        return 0;
+        return x->getID() < y->getID() ? -1 : 1;
     }
 }
 
@@ -43,7 +43,7 @@ L2SchedulingComp (Thread *x, Thread *y)
     } else if (x->priority > y->priority) {
         return -1;
     } else {
-        return 0;
+        return x->getID() < y->getID() ? -1 : 1;
     }
 }
 
@@ -72,6 +72,10 @@ Scheduler::Scheduler()
 Scheduler::~Scheduler()
 { 
     delete readyList; 
+
+    delete L1List;
+    delete L2List;
+    delete L3List;
 } 
 
 //----------------------------------------------------------------------
@@ -206,3 +210,310 @@ Scheduler::Print()
     cout << "Ready list contents:\n";
     readyList->Apply(ThreadPrint);
 }
+
+
+/* MP3 CPU Scheduler */
+
+//----------------------------------------------------------------------
+// Scheduler::AddToQueue
+// 	
+//	
+//----------------------------------------------------------------------
+
+void
+Scheduler::AddToQueue (Thread *thread, int priority)
+{
+    // Set start time of thread for aging mechanism
+    thread->set_wait_start_time(kernel->stats->totalTicks);
+
+    thread->setStatus(READY);
+    if (priority >= 100) {
+        DEBUG(dbgSch, "[AddToQueue] Tick ["<< kernel->stats->totalTicks<<"]: " << \
+                                  "Thread ["<< thread->ID <<"] is inserted into queueL[1]" );
+        L1List->Insert(thread);
+    } else if (priority >= 50) {
+        DEBUG(dbgSch, "[AddToQueue] Tick ["<< kernel->stats->totalTicks<<"]: " << \
+                                  "Thread ["<< thread->ID <<"] is inserted into queueL[2]" );
+        L2List->Insert(thread);
+    } else {
+        DEBUG(dbgSch, "[AddToQueue] Tick ["<< kernel->stats->totalTicks<<"]: " << \
+                                  "Thread ["<< thread->ID <<"] is inserted into queueL[3]" );
+        L3List->Append(thread);
+    }
+}
+
+//----------------------------------------------------------------------
+// Scheduler::Scheduling
+// 	
+//	
+//----------------------------------------------------------------------
+
+Thread*
+Scheduler::Scheduling()
+{
+    ASSERT(kernel->interrupt->getLevel() == IntOff);
+
+    Thread *nextThread;
+
+    #ifdef DEBUG_QUEUES
+    ListAllThread();
+    #endif
+    
+    if (!L1List->IsEmpty()) {
+        // Pick a thread from L1 ready queue (SJF)
+        DEBUG(dbgSch,  "[Scheduling] !L1List->IsEmpty()");
+
+        nextThread = L1List->RemoveFront();
+        nextThread->record_start_ticks(kernel->stats->totalTicks);
+
+        DEBUG(dbgSch,  "[Scheduling] totalTicks ["<<kernel->stats->totalTicks<<"]: nextThread(L1) [" << nextThread->ID <<"], " << \ 
+                       "currThread [" << kernel->currentThread->ID << "] " << \
+                       "and it has executed [" << kernel->stats->totalTicks - kernel->currentThread->cpu_start_ticks << "] ticks ");
+        return nextThread;
+    } else {
+        if (!L2List->IsEmpty()) {
+            // Pick a thread from L2 ready queue (non-preemptive priority)
+            DEBUG(dbgSch,  "[Scheduling] !L2List->IsEmpty()");
+
+            nextThread = L2List->RemoveFront();
+            nextThread->record_start_ticks(kernel->stats->totalTicks);
+
+            DEBUG(dbgSch,  "[Scheduling] totalTicks ["<<kernel->stats->totalTicks<<"]: nextThread(L2) [" << nextThread->ID <<"], " << \ 
+                        "currThread [" << kernel->currentThread->ID << "] " << \
+                        "and it has executed [" << kernel->stats->totalTicks - kernel->currentThread->cpu_start_ticks << "] ticks ");
+            return nextThread;
+        } else {
+            if (!L3List->IsEmpty()) {
+                // Pick a thread from L3 ready queue (Round-Robin)
+                DEBUG(dbgSch,  "[Scheduling] !L3List->IsEmpty()");
+
+                nextThread = L3List->RemoveFront();
+                nextThread->record_start_ticks(kernel->stats->totalTicks);
+
+                DEBUG(dbgSch,  "[Scheduling] totalTicks ["<<kernel->stats->totalTicks<<"]: nextThread(L3) [" << nextThread->ID <<"], " << \ 
+                            "currThread [" << kernel->currentThread->ID << "] " << \
+                            "and it has executed [" << kernel->stats->totalTicks - kernel->currentThread->cpu_start_ticks << "] ticks ");
+                return nextThread;
+            } else {
+                // There is no thread in the 3-levels ready queues
+                // DEBUG(dbgSch, "[Scheduling] There is no thread in the 3-levels ready queues");
+                return NULL;
+            }
+        }
+    }
+
+    return nextThread;
+}
+
+//----------------------------------------------------------------------
+// Scheduler::Aging
+// 	
+//	
+//----------------------------------------------------------------------
+
+void
+Scheduler::Aging()
+{
+    Thread *thread;
+    int totalTicks = kernel->stats->totalTicks;
+
+    if (!L1List->IsEmpty()) {
+        ListIterator<Thread*> *it;
+        it = new ListIterator<Thread*> (L1List);
+        for (; !it->IsDone(); it->Next()) {
+            thread = it->Item();
+
+            thread->accu_wait_ticks += totalTicks - thread->start_wait_ticks;
+            thread->start_wait_ticks = totalTicks;
+
+            if (thread->accu_wait_ticks >= 1500) {
+                DEBUG(dbgSch, "[Aging] L1 update priority, Thread: " << thread->ID <<  \
+                              " , old priority: " << thread->priority);
+
+                // L1 queue limit of priority is 149
+                thread->priority = min(149, thread->priority + 10); 
+                thread->accu_wait_ticks -= 1500;
+            } 
+        }
+    }
+
+    if (!L2List->IsEmpty()) {
+        ListIterator<Thread*> *it;
+        it = new ListIterator<Thread*> (L2List);
+        for (; !it->IsDone(); it->Next()) {
+            thread = it->Item();
+
+            thread->accu_wait_ticks += totalTicks - thread->start_wait_ticks;
+            thread->start_wait_ticks = totalTicks;
+
+            if (thread->accu_wait_ticks >= 1500) {
+                DEBUG(dbgSch, "[Aging] L2 update priority, Thread: " << thread->ID <<  \
+                              " , old priority: " << thread->priority);
+
+                thread->priority += 10;
+                thread->accu_wait_ticks -= 1500;
+            }
+        }
+    }
+
+    if (!L3List->IsEmpty()) {
+        ListIterator<Thread*> *it;
+        it = new ListIterator<Thread*> (L3List);
+        for (; !it->IsDone(); it->Next()) {
+            thread = it->Item();
+
+            thread->accu_wait_ticks += totalTicks - thread->start_wait_ticks;
+            thread->start_wait_ticks = totalTicks;
+
+            if (thread->accu_wait_ticks >= 1500) {
+                DEBUG(dbgSch, "[Aging] L3 update priority, Thread: " << thread->ID <<  \
+                              " , old priority: " << thread->priority);
+
+                thread->priority += 10;
+                thread->accu_wait_ticks -= 1500;
+            }
+        }
+    }
+}
+
+//----------------------------------------------------------------------
+// Scheduler::ReArrangeThreads
+// 	
+//	
+//----------------------------------------------------------------------
+
+void
+Scheduler::ReArrangeThreads()
+{   
+    Thread *migrated_thread;
+
+    ListIterator<Thread*> *it3;
+
+    it3 = new ListIterator<Thread*> (L3List);
+    for (; !it3->IsDone(); it3->Next()) {
+        migrated_thread = L3List->RemoveFront();
+
+        if (migrated_thread->priority >= 100) {
+            DEBUG(dbgSch, "[ReArrangeThreads] Remove L3 Thread: " << migrated_thread->ID << " to L1");
+            L1List->Insert(migrated_thread);
+            
+            int statusCheckPreempt = this->CheckPreempt(migrated_thread);
+            if (statusCheckPreempt) break;
+        } else if (migrated_thread->priority >= 50) {
+            DEBUG(dbgSch, "[ReArrangeThreads] Remove L3 Thread: " << migrated_thread->ID << " to L2");
+            L2List->Insert(migrated_thread);
+
+            int statusCheckPreempt = this->CheckPreempt(migrated_thread);
+            if (statusCheckPreempt) break;
+        } else {
+            DEBUG(dbgSch, "[ReArrangeThreads] Move L3 Thread: " << migrated_thread->ID << " to L3 tail");
+            L3List->Append(migrated_thread);
+        }
+    }
+
+    ListIterator<Thread*> *it2;
+    it2 = new ListIterator<Thread*> (L2List);
+    for (; !it2->IsDone(); it2->Next()) {
+        if (it2->Item()->priority >= 100) {
+            migrated_thread = L2List->RemoveFront();
+            DEBUG(dbgSch, "[ReArrangeThreads] Remove L2 Thread: " << migrated_thread->ID << " to L1");
+            L1List->Insert(migrated_thread);
+
+            int statusCheckPreempt = this->CheckPreempt(migrated_thread);
+            if (statusCheckPreempt) break;
+        }
+    }
+
+    #ifdef DEBUG_QUEUES
+    DEBUG(dbgSch, "[DEBUG_QUEUES][ReArrangeThreads] end");
+    ListAllThread();
+    #endif
+}
+
+
+//----------------------------------------------------------------------
+// Scheduler::CheckPreempt
+// 	
+//	
+//----------------------------------------------------------------------
+
+int
+Scheduler::CheckPreempt(Thread *thread)
+{
+    if (kernel->currentThread->get_level_of_queue() == 3 && \
+        (thread->get_level_of_queue() == 2 || thread->get_level_of_queue() == 1)) {
+        DEBUG(dbgSch, "[CheckPreempt] case 1");
+
+        kernel->currentThread->true_ticks += kernel->stats->totalTicks - kernel->currentThread->cpu_start_ticks;
+
+        Thread *nextThread = this->Scheduling();
+
+        this->AddToQueue(kernel->currentThread, kernel->currentThread->priority);
+        this->Run(nextThread, FALSE);
+        return 1;
+    } else if (kernel->currentThread->get_level_of_queue() == 2 && \
+               thread->get_level_of_queue() == 1) {
+        DEBUG(dbgSch, "[CheckPreempt] case 2");
+
+        kernel->currentThread->true_ticks += kernel->stats->totalTicks - kernel->currentThread->cpu_start_ticks;
+
+        Thread *nextThread = this->Scheduling();
+
+        this->AddToQueue(kernel->currentThread, kernel->currentThread->priority);
+        this->Run(nextThread, FALSE);
+        return 1;
+    } else if (kernel->currentThread->get_level_of_queue() == 1 && \
+               thread->get_level_of_queue() == 1 && \
+               (thread->approx_burst_time < kernel->currentThread->approx_burst_time)) {
+        DEBUG(dbgSch, "[CheckPreempt] case 3");
+
+        kernel->currentThread->true_ticks += kernel->stats->totalTicks - kernel->currentThread->cpu_start_ticks;
+
+        Thread *nextThread = this->Scheduling();
+
+        this->AddToQueue(kernel->currentThread, kernel->currentThread->priority);
+        this->Run(nextThread, FALSE);
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+
+#ifdef DEBUG_QUEUES
+
+void
+Scheduler::ListAllThread()
+{
+    if (L1List->IsEmpty() && L2List->IsEmpty() && L3List->IsEmpty())
+        return;
+
+    printf("L1 queue:\n");
+    if (!L1List->IsEmpty()) {
+        ListIterator<Thread*> *it;
+        it = new ListIterator<Thread*> (L1List);
+        for (; !it->IsDone(); it->Next()) {
+            printf("\t%s(status: %d, priority: %d)\n", it->Item()->getName(), it->Item()->getStatus(), it->Item()->priority);
+        }
+    }
+
+    printf("L2 queue:\n");
+    if (!L2List->IsEmpty()) {
+        ListIterator<Thread*> *it;
+        it = new ListIterator<Thread*> (L2List);
+        for (; !it->IsDone(); it->Next()) {
+            printf("\t%s(status: %d, priority: %d)\n", it->Item()->getName(), it->Item()->getStatus(), it->Item()->priority);
+        }
+    }
+
+    printf("L3 queue:\n");
+    if (!L3List->IsEmpty()) {
+        ListIterator<Thread*> *it;
+        it = new ListIterator<Thread*> (L3List);
+        for (; !it->IsDone(); it->Next()) {
+            printf("\t%s(status: %d, priority: %d)\n", it->Item()->getName(), it->Item()->getStatus(), it->Item()->priority);
+        }
+    }
+}
+
+#endif
