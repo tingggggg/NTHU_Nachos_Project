@@ -1,4 +1,4 @@
-# MP2 Multi Programming
+# MP2 Multi Programming (memory management)
 
 ## Implement page table in NachOS
 
