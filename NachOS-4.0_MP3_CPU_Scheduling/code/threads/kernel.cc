@@ -51,7 +51,7 @@ Kernel::Kernel(int argc, char **argv)
 		} else if (strcmp(argv[i], "-ep") == 0) {
         	execfile[++execfileNum]= argv[++i];
 			threadPriority[execfileNum] = atoi(argv[++i]);
-            cout << "Execute <<" << execfile[execfileNum] << " with priority" << threadPriority[execfileNum] << "\n";
+            cout << "Execute " << execfile[execfileNum] << " with priority " << threadPriority[execfileNum] << "\n";
 		} else if (strcmp(argv[i], "-ci") == 0) {
 	    	ASSERT(i + 1 < argc);
 	    	consoleIn = argv[i + 1];
@@ -115,8 +115,8 @@ Kernel::Initialize()
 #else
     fileSystem = new FileSystem(formatFlag);
 #endif // FILESYS_STUB
-    postOfficeIn = new PostOfficeInput(10);
-    postOfficeOut = new PostOfficeOutput(reliability);
+    // postOfficeIn = new PostOfficeInput(10);
+    // postOfficeOut = new PostOfficeOutput(reliability);
 
     usedPhyPage = new UsedPhyPage();
 
@@ -139,8 +139,8 @@ Kernel::~Kernel()
     delete synchConsoleOut;
     delete synchDisk;
     delete fileSystem;
-    delete postOfficeIn;
-    delete postOfficeOut;
+    // delete postOfficeIn;
+    // delete postOfficeOut;
     delete usedPhyPage;
     
     Exit(0);
@@ -262,18 +262,16 @@ void ForkExecute(Thread *t)
     }
 	
     t->space->Execute(t->getName());
-
 }
 
 void Kernel::ExecAll()
 {
 	for (int i=1;i<=execfileNum;i++) {
-		int a = Exec(execfile[i]);
+		int a = Exec(execfile[i], threadPriority[i]);
 	}
 	currentThread->Finish();
     //Kernel::Exec();	
 }
-
 
 int Kernel::Exec(char* name)
 {
@@ -308,6 +306,16 @@ int Kernel::Exec(char* name)
 //	currentThread->Finish();
 //    Kernel::Run();
 //  cout << "after ThreadedKernel:Run();" << endl;  // unreachable
+}
+
+int Kernel::Exec(char* name, int initial_priority)
+{
+	t[threadNum] = new Thread(name, threadNum, initial_priority);
+	t[threadNum]->space = new AddrSpace();
+	t[threadNum]->Fork((VoidFunctionPtr) &ForkExecute, (void *)t[threadNum]);
+	threadNum++;
+
+	return threadNum-1;
 }
 
 int Kernel::CreateFile(char *filename)
